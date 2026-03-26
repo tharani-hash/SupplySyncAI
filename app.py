@@ -523,6 +523,14 @@ st.markdown(
 # CACHED FUNCTIONS FOR PERFORMANCE
 # ================================================================
 @st.cache_data
+def remove_duplicates_cached(df):
+    """Cached function for duplicate removal processing"""
+    before_df = df.copy()
+    dup_rows = before_df[before_df.duplicated()]
+    after_df = before_df.drop_duplicates().reset_index(drop=True)
+    return before_df, after_df, dup_rows
+
+@st.cache_data
 def remove_outliers_cached(df, delete_cols):
     """Cached function for outlier removal processing"""
     before_df = df.copy()
@@ -631,6 +639,22 @@ def compute_permutation_importance_cached(X, y, selected_features):
     ).clip(lower=0)
     
     return importances.sort_values(ascending=False)
+
+@st.cache_data
+def replace_nulls_cached(df):
+    """Cached function for NULL value replacement"""
+    null_mask = df.isnull()
+    affected_rows_before = df[null_mask.any(axis=1)]
+    null_counts = null_mask.sum()
+    null_counts = null_counts[null_counts > 0]
+    
+    if null_counts.empty:
+        return df, None, None, None
+    else:
+        df_updated = df.fillna("Unknown")
+        null_counts_df = null_counts.to_frame("NULL Count")
+        after_rows = df_updated.loc[affected_rows_before.index].copy()
+        return df_updated, affected_rows_before, after_rows, null_counts_df
 
 @st.cache_data
 def compute_eda_aggregations(df):
@@ -910,13 +934,14 @@ This step identifies and removes <b>exact duplicate records</b> from the supply 
             if dup_rows.empty:
                 st.info("No duplicate rows found in this dataset.")
             else:
-                after_df = before_df.drop_duplicates().reset_index(drop=True)
-                st.session_state.dup_before_df = before_df
-                st.session_state.dup_removed_df = dup_rows
-                st.session_state.dup_after_df = after_df
-                st.session_state.df = after_df
-                st.session_state.preprocessing_completed = True
-                st.success("✔ Duplicate rows removed successfully")
+                with st.spinner("Removing duplicate rows..."):
+                    before_df, after_df, removed_df = remove_duplicates_cached(st.session_state.df)
+                    st.session_state.dup_before_df = before_df
+                    st.session_state.dup_removed_df = removed_df
+                    st.session_state.dup_after_df = after_df
+                    st.session_state.df = after_df
+                    st.session_state.preprocessing_completed = True
+                    st.success("✔ Duplicate rows removed successfully")
 
     if st.session_state.dup_removed_df is not None:
         before_df = st.session_state.dup_before_df
@@ -1174,21 +1199,16 @@ elif step == "Replace Missing Values":
             st.info("This dataset has no missing values — no replacement needed.")
 
         else:
-            st.session_state.null_before_rows = affected_rows_before.copy()
+            with st.spinner("Replacing NULL values..."):
+                df_updated, before_rows, after_rows, null_counts_df = replace_nulls_cached(df)
+                
+                st.session_state.null_before_rows = before_rows
+                st.session_state.null_replaced_cols = null_counts_df
+                st.session_state.df = df_updated
+                st.session_state.preprocessing_completed = True
+                st.session_state.null_after_rows = after_rows
 
-            st.session_state.null_replaced_cols = (
-                null_counts.to_frame("NULL Count")
-            )
-
-            df_updated = df.fillna("Unknown")
-            st.session_state.df = df_updated
-            st.session_state.preprocessing_completed = True
-
-            st.session_state.null_after_rows = df_updated.loc[
-                affected_rows_before.index
-            ].copy()
-
-            st.success("✔ NULL values replaced with 'Unknown'")
+                st.success("✔ NULL values replaced with 'Unknown'")
 
     if (
         st.session_state.null_before_rows is not None and
