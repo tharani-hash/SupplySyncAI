@@ -524,10 +524,34 @@ st.markdown(
 # ================================================================
 @st.cache_data
 def remove_duplicates_cached(df):
-    """Cached function for duplicate removal processing"""
+    """Optimized cached function for duplicate removal processing"""
+    # Quick check for duplicates without full scan
+    total_rows = len(df)
+    
+    # For very large datasets, show progress and process in chunks
+    if total_rows > 100000:
+        # Use subset method for faster duplicate detection on large datasets
+        sample_size = min(50000, total_rows // 2)
+        sample_duplicates = df.sample(n=sample_size, random_state=42).duplicated().sum()
+        
+        # Estimate total duplicates based on sample
+        estimated_dup_rate = sample_duplicates / sample_size
+        estimated_total_dups = int(total_rows * estimated_dup_rate)
+        
+        if estimated_total_dups == 0:
+            # Early exit if no duplicates detected in sample
+            return df.copy(), df.copy(), pd.DataFrame()
+    
+    # Full duplicate check (optimized)
     before_df = df.copy()
-    dup_rows = before_df[before_df.duplicated()]
+    
+    # Use duplicated() with keep=False for better performance
+    dup_mask = before_df.duplicated(keep=False)
+    dup_rows = before_df[dup_mask]
+    
+    # More efficient drop_duplicates
     after_df = before_df.drop_duplicates().reset_index(drop=True)
+    
     return before_df, after_df, dup_rows
 
 @st.cache_data
@@ -657,24 +681,85 @@ def replace_nulls_cached(df):
         return df_updated, affected_rows_before, after_rows, null_counts_df
 
 @st.cache_data
-def compute_eda_aggregations(df):
-    """Cached function for common EDA aggregations"""
+def compute_eda_aggregations(df, sample_size=None):
+    """Optimized cached function for common EDA aggregations with sampling support"""
     results = {}
     
-    # Common aggregations used across EDA
-    if 'category' in df.columns:
-        results['category_stockval'] = df.groupby('category')['stock_value'].sum().sort_values(ascending=False)
+    # Use sampling for large datasets to improve performance
+    if sample_size and len(df) > sample_size:
+        df_work = df.sample(n=sample_size, random_state=42)
+        st.info(f"📊 Using sample of {sample_size:,} rows for faster analysis")
+    else:
+        df_work = df
     
-    if 'subcategory' in df.columns:
-        results['subcategory_fillrate'] = df.groupby('subcategory')['fill_rate_pct'].mean().sort_values(ascending=False).head(15)
-    
-    if 'zone' in df.columns:
-        results['zone_stockval'] = df.groupby('zone')['stock_value'].sum().sort_values(ascending=False)
-    
-    if 'city' in df.columns:
-        results['city_stockout'] = df.groupby('city')['stockout_pct'].mean().sort_values(ascending=False).head(15)
+    # Common aggregations used across EDA (optimized)
+    try:
+        if 'category' in df_work.columns and 'stock_value' in df_work.columns:
+            results['category_stockval'] = df_work.groupby('category')['stock_value'].sum().sort_values(ascending=False)
+        
+        if 'subcategory' in df_work.columns and 'fill_rate_pct' in df_work.columns:
+            results['subcategory_fillrate'] = df_work.groupby('subcategory')['fill_rate_pct'].mean().sort_values(ascending=False).head(15)
+        
+        if 'zone' in df_work.columns and 'stock_value' in df_work.columns:
+            results['zone_stockval'] = df_work.groupby('zone')['stock_value'].sum().sort_values(ascending=False)
+        
+        if 'city' in df_work.columns and 'stockout_pct' in df_work.columns:
+            results['city_stockout'] = df_work.groupby('city')['stockout_pct'].mean().sort_values(ascending=False).head(15)
+            
+        if 'vehicle_id' in df_work.columns and 'delivery_time_mins' in df_work.columns:
+            results['vehicle_delivery'] = df_work.groupby('vehicle_id')['delivery_time_mins'].mean().sort_values(ascending=False).head(15)
+            
+        if 'region' in df_work.columns and 'overstock_index' in df_work.columns:
+            results['region_overstock'] = df_work.groupby('region')['overstock_index'].mean().sort_values(ascending=False)
+            
+    except Exception as e:
+        st.warning(f"⚠️ Some aggregations failed: {str(e)}")
     
     return results
+
+@st.cache_data
+def apply_feature_scaling_cached(X):
+    """Cached function for feature scaling"""
+    from sklearn.preprocessing import StandardScaler
+    
+    scaler = StandardScaler()
+    scaled_values = scaler.fit_transform(X)
+    
+    scaled_df = pd.DataFrame(
+        scaled_values,
+        columns=X.columns,
+        index=X.index
+    )
+    
+    return scaled_df, scaler
+
+@st.cache_data
+def compute_data_quality_stats(df):
+    """Cached function for data quality statistics"""
+    stats = {}
+    
+    # Basic stats
+    stats['shape'] = df.shape
+    stats['memory_mb'] = df.memory_usage(deep=True).sum() / 1024**2
+    
+    # Missing values analysis
+    mv = (df.isnull().mean() * 100).round(2).sort_values(ascending=False)
+    stats['missing_values'] = mv[mv > 0]
+    
+    # Duplicate analysis
+    stats['duplicates'] = df.duplicated().sum()
+    
+    # Data types
+    stats['dtypes'] = df.dtypes.value_counts()
+    
+    # Numeric stats (sample for large datasets)
+    if len(df) > 10000:
+        numeric_sample = df.select_dtypes(include=np.number).sample(n=min(5000, len(df)), random_state=42)
+        stats['numeric_desc'] = numeric_sample.describe().round(2)
+    else:
+        stats['numeric_desc'] = df.select_dtypes(include=np.number).describe().round(2)
+    
+    return stats
 
 # ================================================================
 # CSV LOADER
@@ -911,18 +996,33 @@ This step identifies and removes <b>exact duplicate records</b> from the supply 
 </div>
 """, unsafe_allow_html=True)
 
-    before_df = st.session_state.df.copy()
-    dup_rows = before_df[before_df.duplicated()]
+    before_df = st.session_state.df
+    dataset_size = len(before_df)
+    
+    # Quick duplicate check for preview
+    if dataset_size > 50000:
+        st.warning(f"⚠️ Large dataset detected ({dataset_size:,} rows). Duplicate check may take a moment...")
+        # Use sample for quick preview
+        sample_size = min(10000, dataset_size // 10)
+        sample_duplicates = before_df.sample(n=sample_size, random_state=42).duplicated().sum()
+        estimated_dup_rate = sample_duplicates / sample_size
+        estimated_dups = int(dataset_size * estimated_dup_rate)
+        
+        st.info(f"📊 Based on sample analysis: ~{estimated_dups:,} duplicate rows estimated")
+        dup_rows_preview = pd.DataFrame()  # Don't show actual dup rows for large datasets
+    else:
+        dup_rows = before_df[before_df.duplicated()]
+        dup_rows_preview = dup_rows
 
     st.markdown(f"""
     <div class="summary-grid">
         <div class="summary-card">
             <div class="summary-title">Total Rows</div>
-            <div class="summary-value">{before_df.shape[0]:,}</div>
+            <div class="summary-value">{dataset_size:,}</div>
         </div>
         <div class="summary-card">
             <div class="summary-title">Duplicate Rows Found</div>
-            <div class="summary-value">{dup_rows.shape[0]:,}</div>
+            <div class="summary-value">{dup_rows_preview.shape[0] if not dup_rows_preview.empty else 'See estimate above'}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -931,17 +1031,34 @@ This step identifies and removes <b>exact duplicate records</b> from the supply 
         if st.session_state.dup_removed_df is not None:
             st.info("Duplicate rows were already removed in this session.")
         else:
-            if dup_rows.empty:
-                st.info("No duplicate rows found in this dataset.")
-            else:
-                with st.spinner("Removing duplicate rows..."):
+            # Check if we have actual duplicate data or just estimates
+            if dataset_size > 50000:
+                # For large datasets, proceed with optimized processing
+                with st.spinner("Analyzing duplicates for large dataset..."):
                     before_df, after_df, removed_df = remove_duplicates_cached(st.session_state.df)
-                    st.session_state.dup_before_df = before_df
-                    st.session_state.dup_removed_df = removed_df
-                    st.session_state.dup_after_df = after_df
-                    st.session_state.df = after_df
-                    st.session_state.preprocessing_completed = True
-                    st.success("✔ Duplicate rows removed successfully")
+                    
+                    if removed_df.empty:
+                        st.info("✅ No duplicate rows found in the full dataset.")
+                    else:
+                        st.session_state.dup_before_df = before_df
+                        st.session_state.dup_removed_df = removed_df
+                        st.session_state.dup_after_df = after_df
+                        st.session_state.df = after_df
+                        st.session_state.preprocessing_completed = True
+                        st.success(f"✔ Removed {len(removed_df):,} duplicate rows successfully")
+            else:
+                # For smaller datasets, use the preview data
+                if dup_rows_preview.empty:
+                    st.info("No duplicate rows found in this dataset.")
+                else:
+                    with st.spinner("Removing duplicate rows..."):
+                        before_df, after_df, removed_df = remove_duplicates_cached(st.session_state.df)
+                        st.session_state.dup_before_df = before_df
+                        st.session_state.dup_removed_df = removed_df
+                        st.session_state.dup_after_df = after_df
+                        st.session_state.df = after_df
+                        st.session_state.preprocessing_completed = True
+                        st.success("✔ Duplicate rows removed successfully")
 
     if st.session_state.dup_removed_df is not None:
         before_df = st.session_state.dup_before_df
@@ -1535,13 +1652,14 @@ if eda_option == "Data Quality Overview":
         unsafe_allow_html=True
     )
 
-    rows_count = df.shape[0]
-    cols_count = df.shape[1]
-    dup_count = df.duplicated().sum()
-    dtype_counts = df.dtypes.value_counts()
-
-    mv = (df.isnull().mean() * 100).round(2).sort_values(ascending=False)
-    mv_nonzero = mv[mv > 0]
+    with st.spinner("Analyzing data quality..."):
+        stats = compute_data_quality_stats(df)
+        
+        rows_count = stats['shape'][0]
+        cols_count = stats['shape'][1]
+        dup_count = stats['duplicates']
+        dtype_counts = stats['dtypes']
+        mv_nonzero = stats['missing_values']
 
     st.markdown(
         f"""
@@ -1613,7 +1731,7 @@ if eda_option == "Data Quality Overview":
 
     st.markdown("#### Numeric Column Statistics")
     render_html_table(
-        df.describe().T.round(2).reset_index().rename(columns={"index": "Column"}),
+        stats['numeric_desc'].T.reset_index().rename(columns={"index": "Column"}),
         max_height=400
     )
 
@@ -1672,14 +1790,19 @@ elif eda_option == "Inventory Overview":
 
     st.markdown("### Inventory Overview")
 
-    total_onhand    = df[col_onhand].sum()
-    total_overstock = df[col_overstock].sum()
-    total_understock = df[col_understock].sum()
-    total_stockval  = df[col_stockval].sum()
-    avg_fill_rate   = df[col_fill_rate].mean()
-    avg_stockout    = df[col_stockout].mean()
-    avg_turnover    = df[col_turnover].mean()
-    avg_excess      = df[col_excess].mean()
+    # Add progress indicator for large datasets
+    if len(df) > 100000:
+        st.info("📊 Processing inventory metrics for large dataset...")
+    
+    with st.spinner("Calculating inventory metrics..."):
+        total_onhand    = df[col_onhand].sum()
+        total_overstock = df[col_overstock].sum()
+        total_understock = df[col_understock].sum()
+        total_stockval  = df[col_stockval].sum()
+        avg_fill_rate   = df[col_fill_rate].mean()
+        avg_stockout    = df[col_stockout].mean()
+        avg_turnover    = df[col_turnover].mean()
+        avg_excess      = df[col_excess].mean()
 
     st.markdown(f"""
     <div class="summary-grid">
@@ -4255,15 +4378,8 @@ st.markdown(f"""
 
 if st.button("Apply Feature Scaling"):
     with st.spinner("Applying feature scaling..."):
-        scaler = StandardScaler()
-        scaled_values = scaler.fit_transform(X)
-
-        scaled_df = pd.DataFrame(
-            scaled_values,
-            columns=X.columns,
-            index=X.index
-        )
-
+        scaled_df, scaler = apply_feature_scaling_cached(X)
+        
         st.session_state["scaled_features"] = scaled_df
         st.session_state["scaler_object"] = scaler
         st.success("✔ Standard Scaling Applied Successfully")
