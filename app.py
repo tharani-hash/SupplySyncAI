@@ -5,6 +5,13 @@ import matplotlib.pyplot as plt
 import io
 import numpy as np
 import altair as alt
+import sys
+import traceback
+from dup_connection_utils import connection_retry_decorator, check_connection_state, safe_rerun, show_connection_status, safe_dataframe_operation, safe_feature_selection, safe_altair_chart
+from dup_config import configure_dup_streamlit, get_dup_config, get_processing_limits
+
+# Configure Streamlit for better WebSocket handling
+configure_dup_streamlit()
 
 st.set_page_config(page_title="SupplySyncAI – Supply Chain Intelligence", layout="wide")
 
@@ -416,25 +423,51 @@ alt.themes.enable("transparent_theme")
 # HTML TABLE RENDERER
 # ================================================================
 def render_html_table(df, title=None, max_height=300):
+    """Optimized HTML table renderer with performance limits and WebSocket safety"""
+    if df is None or df.empty:
+        st.info("No data to display")
+        return
+        
+    # Get processing limits based on dataset size
+    limits = get_processing_limits(df) if hasattr(df, 'shape') else {}
+    max_rows = limits.get('max_display_rows', get_dup_config('max_rows_display', 2000))
+    
+    if len(df) > max_rows:
+        df = df.head(max_rows)
+        st.warning(f"⚠️ Showing first {max_rows:,} rows of {len(df):,} total rows for performance")
+    
     if title:
         st.markdown(f"**{title}**")
-    html = f"""
-    <div style="overflow-x:auto; overflow-y:auto; max-height:{max_height}px;
-                border:1px solid #D1D5DB; border-radius:8px;">
-    <table style="width:100%; border-collapse:collapse; font-size:13px; background:#fff;">
-        <thead style="position:sticky; top:0; z-index:1;">
-            <tr>
-    """
-    for c in df.columns:
-        html += f'<th style="background:#1F3A5F;color:white;padding:8px 10px;text-align:left;font-weight:600;white-space:nowrap;">{c}</th>'
-    html += "</tr></thead><tbody>"
-    for _, row in df.iterrows():
-        html += "<tr style='border-bottom:1px solid #E5E7EB;'>"
-        for val in row:
-            html += f"<td style='padding:6px 10px;white-space:nowrap;'>{val}</td>"
-        html += "</tr>"
-    html += "</tbody></table></div>"
-    st.markdown(html, unsafe_allow_html=True)
+    
+    try:
+        html = f"""
+        <div style="overflow-x:auto; overflow-y:auto; max-height:{max_height}px;
+                    border:1px solid #D1D5DB; border-radius:8px;">
+        <table style="width:100%; border-collapse:collapse; font-size:13px; background:#fff;">
+            <thead style="position:sticky; top:0; z-index:1;">
+                <tr>
+        """
+        for c in df.columns:
+            html += f'<th style="background:#1F3A5F;color:white;padding:8px 10px;text-align:left;font-weight:600;white-space:nowrap;">{c}</th>'
+        html += "</tr></thead><tbody>"
+        
+        # Process in chunks for better performance
+        chunk_size = limits.get('chunk_size', get_dup_config('chunk_size', 1000))
+        for i in range(0, len(df), chunk_size):
+            chunk = df.iloc[i:i+chunk_size]
+            for _, row in chunk.iterrows():
+                html += "<tr style='border-bottom:1px solid #E5E7EB;'>"
+                for val in row:
+                    html += f"<td style='padding:6px 10px;white-space:nowrap;'>{val}</td>"
+                html += "</tr>"
+        
+        html += "</tbody></table></div>"
+        st.markdown(html, unsafe_allow_html=True)
+        
+    except Exception as e:
+        st.error(f"Error rendering table: {str(e)}")
+        # Fallback to simple display
+        st.dataframe(df.head(10))
 
 
 # ================================================================
@@ -518,6 +551,35 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# ================================================================
+# CONNECTION STATUS DISPLAY
+# ================================================================
+show_connection_status()
+
+# ================================================================
+# ERROR HANDLING AND CONNECTION MANAGEMENT
+# ================================================================
+def handle_streamlit_errors(func):
+    """Global error handler for Streamlit operations"""
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            if "WebSocketClosedError" in str(e) or "StreamClosedError" in str(e):
+                st.session_state.connection_status = "Disconnected"
+                st.error("🔴 Connection lost. The application is trying to reconnect...")
+                return None
+            else:
+                st.error(f"❌ An error occurred: {str(e)}")
+                st.code(traceback.format_exc())
+                return None
+    return wrapper
+
+@connection_retry_decorator(max_retries=2, delay=0.5)
+@handle_streamlit_errors
+def safe_data_operation(operation_func, *args, **kwargs):
+    """Wrapper for data operations with connection safety"""
+    return operation_func(*args, **kwargs)
 
 # ================================================================
 # CACHED FUNCTIONS FOR PERFORMANCE
@@ -525,75 +587,86 @@ st.markdown(
 @st.cache_data
 def remove_duplicates_cached(df):
     """Optimized cached function for duplicate removal processing"""
-    # Quick check for duplicates without full scan
-    total_rows = len(df)
-    
-    # For very large datasets, show progress and process in chunks
-    if total_rows > 100000:
-        # Use subset method for faster duplicate detection on large datasets
-        sample_size = min(50000, total_rows // 2)
-        sample_duplicates = df.sample(n=sample_size, random_state=42).duplicated().sum()
+    try:
+        # Quick check for duplicates without full scan
+        total_rows = len(df)
         
-        # Estimate total duplicates based on sample
-        estimated_dup_rate = sample_duplicates / sample_size
-        estimated_total_dups = int(total_rows * estimated_dup_rate)
+        # Full duplicate check (optimized)
+        before_df = df.copy()
         
-        if estimated_total_dups == 0:
-            # Early exit if no duplicates detected in sample
-            return df.copy(), df.copy(), pd.DataFrame()
-    
-    # Full duplicate check (optimized)
-    before_df = df.copy()
-    
-    # Use duplicated() with keep=False for better performance
-    dup_mask = before_df.duplicated(keep=False)
-    dup_rows = before_df[dup_mask]
-    
-    # More efficient drop_duplicates
-    after_df = before_df.drop_duplicates().reset_index(drop=True)
-    
-    return before_df, after_df, dup_rows
+        # Use duplicated() with keep=False for better performance
+        dup_mask = before_df.duplicated(keep=False)
+        dup_rows = before_df[dup_mask]
+        
+        # More efficient drop_duplicates
+        after_df = before_df.drop_duplicates().reset_index(drop=True)
+        
+        # Check connection state
+        if not check_connection_state():
+            st.warning("Connection lost during duplicate detection. Results may be incomplete.")
+        
+        return before_df, after_df, dup_rows
+        
+    except Exception as e:
+        if "WebSocketClosedError" in str(e) or "StreamClosedError" in str(e):
+            st.error("Connection lost during duplicate removal. Please try again.")
+            return df, df.copy().drop_duplicates().reset_index(drop=True), pd.DataFrame()
+        else:
+            raise e
 
 @st.cache_data
 def remove_outliers_cached(df, delete_cols):
     """Cached function for outlier removal processing"""
-    before_df = df.copy()
-    after_df = before_df.copy()
-    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-    
-    outlier_count = pd.Series(0, index=before_df.index)
+    try:
+        before_df = df.copy()
+        after_df = before_df.copy()
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        
+        outlier_count = pd.Series(0, index=before_df.index)
 
-    for col in numeric_cols:
-        Q1 = before_df[col].quantile(0.25)
-        Q3 = before_df[col].quantile(0.75)
-        IQR = Q3 - Q1
+        for col in numeric_cols:
+            Q1 = before_df[col].quantile(0.25)
+            Q3 = before_df[col].quantile(0.75)
+            IQR = Q3 - Q1
 
-        mild_lower = Q1 - 1.5 * IQR
-        mild_upper = Q3 + 1.5 * IQR
+            mild_lower = Q1 - 1.5 * IQR
+            mild_upper = Q3 + 1.5 * IQR
 
-        extreme_lower = Q1 - 2.0 * IQR
-        extreme_upper = Q3 + 2.0 * IQR
+            extreme_lower = Q1 - 2.0 * IQR
+            extreme_upper = Q3 + 2.0 * IQR
 
-        is_mild = (
-            (before_df[col] < mild_lower) |
-            (before_df[col] > mild_upper)
-        )
+            is_mild = (
+                (before_df[col] < mild_lower) |
+                (before_df[col] > mild_upper)
+            )
 
-        outlier_count += is_mild.astype(int)
+            outlier_count += is_mild.astype(int)
 
-        if col in delete_cols:
-            outlier_count += (
-                (before_df[col] < extreme_lower) |
-                (before_df[col] > extreme_upper)
-            ).astype(int) * 2
+            if col in delete_cols:
+                outlier_count += (
+                    (before_df[col] < extreme_lower) |
+                    (before_df[col] > extreme_upper)
+                ).astype(int) * 2
 
-        after_df[col] = after_df[col].clip(mild_lower, mild_upper)
+            after_df[col] = after_df[col].clip(mild_lower, mild_upper)
+            
+            # Check connection state periodically during processing
+            if len(numeric_cols) > 10 and numeric_cols.index(col) % 5 == 0:
+                if not check_connection_state():
+                    st.warning("Connection lost during outlier processing. Results may be incomplete.")
 
-    extreme_mask = outlier_count >= 4
-    removed_df = before_df[extreme_mask]
-    after_df = after_df[~extreme_mask].reset_index(drop=True)
-    
-    return before_df, after_df, removed_df
+        extreme_mask = outlier_count >= 4
+        removed_df = before_df[extreme_mask]
+        after_df = after_df[~extreme_mask].reset_index(drop=True)
+        
+        return before_df, after_df, removed_df
+        
+    except Exception as e:
+        if "WebSocketClosedError" in str(e) or "StreamClosedError" in str(e):
+            st.error("Connection lost during outlier removal. Please try again.")
+            return df, df.copy(), pd.DataFrame()
+        else:
+            raise e
 
 @st.cache_data
 def compute_correlation_cached(numeric_df, target_column):
@@ -618,11 +691,17 @@ def compute_selectkbest_cached(X, y, k=20):
 
 @st.cache_data
 def compute_rfe_cached(X, y, n_features=20):
-    """Cached function for Recursive Feature Elimination"""
+    """Cached function for Recursive Feature Elimination with optimization"""
     from sklearn.feature_selection import RFE
     from sklearn.ensemble import RandomForestRegressor
     
-    model = RandomForestRegressor(n_estimators=50, random_state=42)
+    # Use fewer estimators for faster processing
+    model = RandomForestRegressor(
+        n_estimators=25,  # Reduced from 50
+        max_depth=10,     # Limit depth
+        random_state=42,
+        n_jobs=-1         # Use all cores
+    )
     rfe = RFE(model, n_features_to_select=min(n_features, X.shape[1]))
     rfe.fit(X, y)
     selected_features = X.columns[rfe.support_].tolist()
@@ -681,7 +760,7 @@ def replace_nulls_cached(df):
         return df_updated, affected_rows_before, after_rows, null_counts_df
 
 @st.cache_data
-def compute_eda_aggregations(df, sample_size=None):
+def compute_eda_aggregations(df, sample_size=10000):
     """Optimized cached function for common EDA aggregations with sampling support"""
     results = {}
     
@@ -692,25 +771,32 @@ def compute_eda_aggregations(df, sample_size=None):
     else:
         df_work = df
     
-    # Common aggregations used across EDA (optimized)
+    # Pre-compute common groupby objects to avoid repetition
     try:
+        # Cache groupby objects for reuse
         if 'category' in df_work.columns and 'stock_value' in df_work.columns:
-            results['category_stockval'] = df_work.groupby('category')['stock_value'].sum().sort_values(ascending=False)
+            cat_group = df_work.groupby('category')['stock_value']
+            results['category_stockval'] = cat_group.sum().sort_values(ascending=False)
         
         if 'subcategory' in df_work.columns and 'fill_rate_pct' in df_work.columns:
-            results['subcategory_fillrate'] = df_work.groupby('subcategory')['fill_rate_pct'].mean().sort_values(ascending=False).head(15)
+            subcat_group = df_work.groupby('subcategory')['fill_rate_pct']
+            results['subcategory_fillrate'] = subcat_group.mean().sort_values(ascending=False).head(15)
         
         if 'zone' in df_work.columns and 'stock_value' in df_work.columns:
-            results['zone_stockval'] = df_work.groupby('zone')['stock_value'].sum().sort_values(ascending=False)
+            zone_group = df_work.groupby('zone')['stock_value']
+            results['zone_stockval'] = zone_group.sum().sort_values(ascending=False)
         
         if 'city' in df_work.columns and 'stockout_pct' in df_work.columns:
-            results['city_stockout'] = df_work.groupby('city')['stockout_pct'].mean().sort_values(ascending=False).head(15)
+            city_group = df_work.groupby('city')['stockout_pct']
+            results['city_stockout'] = city_group.mean().sort_values(ascending=False).head(15)
             
         if 'vehicle_id' in df_work.columns and 'delivery_time_mins' in df_work.columns:
-            results['vehicle_delivery'] = df_work.groupby('vehicle_id')['delivery_time_mins'].mean().sort_values(ascending=False).head(15)
+            vehicle_group = df_work.groupby('vehicle_id')['delivery_time_mins']
+            results['vehicle_delivery'] = vehicle_group.mean().sort_values(ascending=False).head(15)
             
         if 'region' in df_work.columns and 'overstock_index' in df_work.columns:
-            results['region_overstock'] = df_work.groupby('region')['overstock_index'].mean().sort_values(ascending=False)
+            region_group = df_work.groupby('region')['overstock_index']
+            results['region_overstock'] = region_group.mean().sort_values(ascending=False)
             
     except Exception as e:
         st.warning(f"⚠️ Some aggregations failed: {str(e)}")
@@ -766,7 +852,30 @@ def compute_data_quality_stats(df):
 # ================================================================
 @st.cache_data
 def load_data():
-    return pd.read_csv("FACT_SUPPLY_CHAIN_DATA.csv")
+    # Optimize CSV loading with dtype specification and chunking for preview
+    dtype_spec = {
+        'product_id': 'category',
+        'store_id': 'category', 
+        'route_id': 'category',
+        'vehicle_id': 'category',
+        'supplier_id': 'category',
+        'cluster_id': 'category',
+        'category': 'category',
+        'subcategory': 'category',
+        'region': 'category',
+        'zone': 'category',
+        'store_type': 'category',
+        'is_holiday': 'bool',
+        'is_weekend': 'bool'
+    }
+    
+    try:
+        # Read with optimized dtypes
+        df = pd.read_csv("FACT_SUPPLY_CHAIN_DATA.csv", dtype=dtype_spec)
+        return df
+    except Exception as e:
+        st.error(f"Error loading CSV: {e}")
+        return pd.DataFrame()
 
 
 def show_small_plot(fig):
@@ -842,18 +951,18 @@ if "df" not in st.session_state:
     st.session_state.df = None
 
 if st.button("Load Data"):
-    with st.spinner("Loading supply chain data..."):
-        try:
-            st.session_state.df = load_data()
-            st.success("Data loaded successfully!")
-        except Exception:
-            import os
-            uploads_path = "/mnt/user-data/uploads/FACT_SUPPLY_CHAIN_DATA.csv"
-            if os.path.exists(uploads_path):
-                st.session_state.df = pd.read_csv(uploads_path)
-                st.success("Data loaded successfully!")
+    try:
+        st.session_state.connection_status = "Connected"
+        with st.spinner("Loading supply chain data..."):
+            result = safe_data_operation(load_data)
+            if result is not None and not result.empty:
+                st.session_state.df = result
+                st.success("✅ Data loaded successfully!")
             else:
-                st.error("Could not find FACT_SUPPLY_CHAIN_DATA.csv. Place it in data/ folder.")
+                st.error("❌ Failed to load data. Please try again.")
+    except Exception as e:
+        st.error(f"❌ Error loading data: {str(e)}")
+        st.session_state.connection_status = "Disconnected"
 
 df = st.session_state.df
 
@@ -1506,6 +1615,14 @@ col_shelf_life = map_col(["shelf_life_days"])
 
 num_df = df.select_dtypes(include=np.number)
 
+
+# Use sampling for large EDA operations
+SAMPLE_SIZE = 15000 if len(df) > 15000 else len(df)
+if len(df) > SAMPLE_SIZE:
+    st.info(f"📊 Using sample of {SAMPLE_SIZE:,} rows for faster EDA visualizations")
+    df_sample = df.sample(n=SAMPLE_SIZE, random_state=42)
+else:
+    df_sample = df
 
 # ================================================================
 # EDA NAVIGATION
@@ -3178,21 +3295,46 @@ if eda_option in [
     with col1:
         blue_title_ext("Total Stock Value by Category")
         cat_sv = df.groupby(col_category)[col_stockval].sum().sort_values(ascending=False)
-        chart_cat = (
-            alt.Chart(cat_sv.reset_index())
-            .mark_bar(color=BAR_BLUE, cornerRadiusEnd=6)
-            .encode(
-                x=alt.X(f"{col_category}:O", title="Category"),
-                y=alt.Y(f"{col_stockval}:Q", title="Total Stock Value (₹)", scale=alt.Scale(padding=10)),
-                tooltip=[col_category, col_stockval]
+        
+        def create_altair_chart():
+            chart_cat = (
+                alt.Chart(cat_sv.reset_index())
+                .mark_bar(color=BAR_BLUE, cornerRadiusEnd=6)
+                .encode(
+                    x=alt.X(f"{col_category}:O", title="Category"),
+                    y=alt.Y(f"{col_stockval}:Q", title="Total Stock Value (₹)", scale=alt.Scale(padding=10)),
+                    tooltip=[col_category, col_stockval]
+                )
+                .properties(height=340, background=GREEN_BG,
+                            padding={"top":10,"left":10,"right":10,"bottom":10})
+                .configure_view(fill=GREEN_BG, strokeOpacity=0)
+                .configure_axis(labelColor="#000000", titleColor="#000000",
+                                gridColor="rgba(0,0,0,0.2)", domainColor="rgba(0,0,0,0.3)")
             )
-            .properties(height=340, background=GREEN_BG,
-                        padding={"top":10,"left":10,"right":10,"bottom":10})
-            .configure_view(fill=GREEN_BG, strokeOpacity=0)
-            .configure_axis(labelColor="#000000", titleColor="#000000",
-                            gridColor="rgba(0,0,0,0.2)", domainColor="rgba(0,0,0,0.3)")
-        )
-        st.altair_chart(chart_cat, use_container_width=True)
+            return chart_cat
+        
+        try:
+            chart_cat = safe_feature_selection(create_altair_chart)
+            if chart_cat is not None:
+                st.altair_chart(chart_cat, use_container_width=True)
+            else:
+                raise Exception("Chart creation failed")
+        except Exception as e:
+            st.error(f"Error creating Altair chart: {str(e)}")
+            # Fallback to matplotlib
+            fig_cat, ax_cat = plt.subplots(figsize=(7, 4))
+            fig_cat.patch.set_facecolor(GREEN_BG)
+            ax_cat.set_facecolor(GREEN_BG)
+            fig_cat.subplots_adjust(left=0.08, right=0.98, top=0.92, bottom=0.32)
+            ax_cat.bar(cat_sv.index.astype(str), cat_sv.values, color=BAR_BLUE)
+            ax_cat.set_xlabel("Category")
+            ax_cat.set_ylabel("Total Stock Value (₹)")
+            ax_cat.tick_params(axis="x", rotation=45)
+            ax_cat.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax_cat.spines["top"].set_visible(False)
+            ax_cat.spines["right"].set_visible(False)
+            st.pyplot(fig_cat)
+            plt.close(fig_cat)
 
     with col2:
         blue_title_ext("Avg Fill Rate by Subcategory")
