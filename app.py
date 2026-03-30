@@ -1919,41 +1919,61 @@ with st.expander(" ", expanded=True):
     row1 = st.columns(4)
     row2 = st.columns(4)
     row3 = st.columns(4)
-    row4 = st.columns(3)
+    row4 = st.columns(4)
+    row5 = st.columns(4)
+    row6 = st.columns(3)
 
     with row1[0]:
         nav_button("Data Quality Overview", "Data Quality Overview")
     with row1[1]:
-        nav_button("Sales Overview", "Sales Overview")
+        nav_button("Inventory Overview", "Inventory Overview")
     with row1[2]:
-        nav_button("Data Quality Analysis", "Data Quality Analysis")
+        nav_button("Supplier Analysis", "Supplier Analysis")
     with row1[3]:
         nav_button("Product Analysis", "Product Analysis")
 
     with row2[0]:
-        nav_button("Customer Analysis", "Customer Analysis")
+        nav_button("Product-Level Analysis", "Product-Level Analysis")
     with row2[1]:
         nav_button("Store Analysis", "Store Analysis")
     with row2[2]:
-        nav_button("Vendor Analysis", "Vendor Analysis")
+        nav_button("Store & Regional Analysis", "Store & Regional Analysis")
     with row2[3]:
-        nav_button("Location Analysis", "Location Analysis")
+        nav_button("Customer Analysis", "Customer Analysis")
 
     with row3[0]:
-        nav_button("Warehouse Analysis", "Warehouse Analysis")
+        nav_button("Vendor Analysis", "Vendor Analysis")
     with row3[1]:
-        nav_button("Transport Route Analysis", "Transport Route Analysis")
+        nav_button("Location Analysis", "Location Analysis")
     with row3[2]:
-        nav_button("Sales Analysis", "Sales Analysis")
+        nav_button("Warehouse Analysis", "Warehouse Analysis")
     with row3[3]:
-        nav_button("Inventory Analysis", "Inventory Analysis")
+        nav_button("Transport Route Analysis", "Transport Route Analysis")
 
     with row4[0]:
-        nav_button("Redistribution Analysis", "Redistribution Analysis")
+        nav_button("Shipment & Routing Analysis", "Shipment & Routing Analysis")
     with row4[1]:
-        nav_button("Reallocation Analysis", "Reallocation Analysis")
+        nav_button("Cluster Transfer Analysis", "Cluster Transfer Analysis")
     with row4[2]:
+        nav_button("Sales Analysis", "Sales Analysis")
+    with row4[3]:
+        nav_button("Inventory Analysis", "Inventory Analysis")
+
+    with row5[0]:
+        nav_button("Redistribution Analysis", "Redistribution Analysis")
+    with row5[1]:
+        nav_button("Reallocation Analysis", "Reallocation Analysis")
+    with row5[2]:
         nav_button("Logistics Analysis", "Logistics Analysis")
+    with row5[3]:
+        nav_button("Time & Seasonality Analysis", "Time & Seasonality Analysis")
+
+    with row6[0]:
+        nav_button("Summary Report", "Summary Report")
+    with row6[1]:
+        nav_button("Sales Overview", "Sales Overview")
+    with row6[2]:
+        nav_button("Data Quality Analysis", "Data Quality Analysis")
 
 
 eda_option = st.session_state.eda_option
@@ -3491,19 +3511,94 @@ elif eda_option == "Sales Overview":
             margin-bottom:25px;">
 
         <b>What this section does:</b>
-        Provides comprehensive analysis of sales performance across different dimensions.
+        Macro-level sales and stock performance overview across categories, regions, and time.
 
         <b>Key insights covered:</b>
-        <li>Total sales volume and revenue trends</li>
-        <li>Sales performance by product, store, and region</li>
-        <li>Seasonal sales patterns and trends</li>
+        <ul>
+            <li>Total stock value by category — bar and pie breakdown</li>
+            <li>Average fill rate by region</li>
+            <li>Monthly stock value trend</li>
+            <li>Holiday vs non-holiday stock value comparison</li>
+        </ul>
 
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    st.info("📊 Sales Overview analysis will be implemented with actual sales data")
+    st.markdown("### Sales Overview")
+
+    if col_stockval and col_category:
+        sv_by_cat = df.groupby(col_category, observed=True)[col_stockval].sum().sort_values(ascending=False)
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Total Stock Value by Category")
+            fig, ax = plt.subplots(figsize=(7, 4))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.bar(sv_by_cat.index.astype(str), sv_by_cat.values, color=BAR_BLUE)
+            ax.set_xlabel("Category"); ax.set_ylabel("Stock Value (₹)")
+            ax.tick_params(axis="x", rotation=45)
+            ax.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+        with c2:
+            blue_title("Stock Value Share by Category")
+            fig2, ax2 = plt.subplots(figsize=(7, 4))
+            fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+            ax2.pie(sv_by_cat.values, labels=sv_by_cat.index.astype(str), autopct="%1.1f%%", startangle=140)
+            st.pyplot(fig2); plt.close(fig2)
+
+    if col_fill_rate and col_region:
+        blue_title("Avg Fill Rate by Region")
+        fr_reg = df.groupby(col_region, observed=True)[col_fill_rate].mean().sort_values(ascending=False)
+        fig3, ax3 = plt.subplots(figsize=(10, 4))
+        fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+        ax3.bar(fr_reg.index.astype(str), fr_reg.values, color=BAR_BLUE)
+        ax3.set_xlabel("Region"); ax3.set_ylabel("Avg Fill Rate (%)")
+        ax3.tick_params(axis="x", rotation=45)
+        ax3.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+        st.pyplot(fig3); plt.close(fig3)
+
+    if col_stockval and col_month:
+        blue_title("Monthly Stock Value Trend")
+        mv_month = df.groupby(col_month)[col_stockval].sum().sort_index()
+        fig4, ax4 = plt.subplots(figsize=(10, 4))
+        fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+        ax4.plot(range(len(mv_month)), mv_month.values, marker="o", color=BAR_BLUE, linewidth=2)
+        ax4.fill_between(range(len(mv_month)), mv_month.values, alpha=0.2, color=BAR_BLUE)
+        ax4.set_xticks(range(len(mv_month)))
+        ax4.set_xticklabels(mv_month.index.astype(str), rotation=45, ha="right")
+        ax4.set_xlabel("Month"); ax4.set_ylabel("Stock Value (₹)")
+        ax4.grid(linestyle="-", color=GRID_GREEN, alpha=0.4)
+        ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+        st.pyplot(fig4); plt.close(fig4)
+
+    if col_stockval and col_is_holiday:
+        c3, c4 = st.columns(2)
+        with c3:
+            blue_title("Stock Value: Holiday vs Non-Holiday")
+            hol_grp = df.groupby(col_is_holiday)[col_stockval].sum()
+            labels = ["Non-Holiday" if not k else "Holiday" for k in hol_grp.index]
+            fig5, ax5 = plt.subplots(figsize=(7, 4))
+            fig5.patch.set_facecolor(GREEN_BG); ax5.set_facecolor(GREEN_BG)
+            ax5.bar(labels, hol_grp.values, color=[BAR_BLUE, "#EF4444"])
+            ax5.set_ylabel("Total Stock Value (₹)")
+            ax5.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax5.spines["top"].set_visible(False); ax5.spines["right"].set_visible(False)
+            st.pyplot(fig5); plt.close(fig5)
+        with c4:
+            if col_stockval and col_quarter:
+                blue_title("Stock Value by Quarter")
+                sv_q = df.groupby(col_quarter)[col_stockval].sum().sort_index()
+                fig6, ax6 = plt.subplots(figsize=(7, 4))
+                fig6.patch.set_facecolor(GREEN_BG); ax6.set_facecolor(GREEN_BG)
+                ax6.bar(sv_q.index.astype(str), sv_q.values, color=BAR_BLUE)
+                ax6.set_xlabel("Quarter"); ax6.set_ylabel("Stock Value (₹)")
+                ax6.tick_params(axis="x", rotation=45)
+                ax6.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+                ax6.spines["top"].set_visible(False); ax6.spines["right"].set_visible(False)
+                st.pyplot(fig6); plt.close(fig6)
 
 
 # ================================================================
@@ -3511,8 +3606,7 @@ elif eda_option == "Sales Overview":
 # ================================================================
 elif eda_option == "Data Quality Analysis":
 
-    st.markdown(
-        """
+    st.markdown("""
         <div style="
             background-color:#2F75B5;
             padding:28px;
@@ -3521,358 +3615,129 @@ elif eda_option == "Data Quality Analysis":
             font-size:16px;
             line-height:1.6;
             margin-bottom:25px;">
-
         <b>What this section does:</b>
-        Comprehensive assessment of data quality issues and completeness.
-
+        Advanced numeric data profiling — correlation matrix, distribution analysis,
+        skewness/kurtosis, and outlier counts across all numeric supply chain columns.
         <b>Key insights covered:</b>
-        <li>Missing value patterns across columns</li>
-        <li>Data type inconsistencies</li>
-        <li>Duplicate record detection</li>
-        <li>Outlier identification</li>
+        <ul>
+            <li>Correlation heatmap of all numeric columns</li>
+            <li>Skewness and kurtosis per numeric column</li>
+            <li>IQR-based outlier count per numeric column</li>
+            <li>Numeric column statistics deep-dive table</li>
+        </ul>
+        </div>""", unsafe_allow_html=True)
 
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    st.markdown("### Advanced Numeric Data Quality Analysis")
 
-    # Data Quality Overview
-    st.markdown("### Data Quality Assessment")
-    
-    # Basic Dataset Info
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Rows", f"{len(df):,}")
-    
-    with col2:
-        st.metric("Total Columns", f"{df.shape[1]}")
-    
-    with col3:
-        st.metric("Memory Usage", f"{df.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
-    
-    with col4:
-        duplicate_rows = df.duplicated().sum()
-        st.metric("Duplicate Rows", f"{duplicate_rows:,}")
-    
-    # Missing Values Analysis
-    st.markdown("### Missing Values Analysis")
-    
-    missing_data = df.isnull().sum()
-    missing_data = missing_data[missing_data > 0].sort_values(ascending=False)
-    
-    if missing_data.empty:
-        st.success("✅ No missing values found in the dataset!")
+    numeric_cols_dqa = df.select_dtypes(include=np.number).columns.tolist()
+
+    if not numeric_cols_dqa:
+        st.warning("No numeric columns found.")
     else:
-        # Missing values summary
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**Missing Values Summary:**")
-            missing_df = missing_data.reset_index()
-            missing_df = missing_df.reset_index()  # Create proper DataFrame with index
-            missing_df.columns = ['Column', 'Missing Count', 'Missing %']
-            
-            # Ensure we're working with numeric data
-            try:
-                total_records = int(len(df)) if df is not None and hasattr(df, '__len__') else 0
-                if total_records > 0:
-                    missing_df['Missing %'] = (missing_df['Missing Count'] / total_records * 100).round(2)
-            except Exception as e:
-                st.error(f"Error calculating missing percentages: {str(e)}")
-                missing_df['Missing %'] = 0
-            
-            # Display as a styled table
-            for _, row in missing_df.iterrows():
-                percentage_color = "#FF6B6B" if row['Missing %'] > 10 else "#F59E0B" if row['Missing %'] > 5 else "#10B981"
-                st.markdown(f"""
-                <div style="
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    padding: 8px;
-                    margin: 4px 0;
-                    background-color: #f8f9fa;
-                    border-left: 4px solid {percentage_color};
-                    border-radius: 4px;
-                ">
-                    <span style="font-weight: 600;">{row['Column']}</span>
-                    <span style="color: #666;">{row['Missing Count']} ({row['Missing %']}%)</span>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        with col2:
-            # Missing values visualization
-            if not missing_data.empty:
-                st.markdown("**Missing Values Distribution:**")
-                
-                fig, ax = plt.subplots(figsize=(8, 4))
-                fig.patch.set_facecolor('#00D05E')
-                ax.set_facecolor('#00D05E')
-                
-                # Create horizontal bar chart
-                missing_data_sorted = missing_data.sort_values(ascending=True)
-                y_pos = np.arange(len(missing_data_sorted))
-                
-                bars = ax.barh(y_pos, missing_data_sorted.values, color='#FF6B6B', alpha=0.8)
-                ax.set_yticks(y_pos)
-                ax.set_yticklabels(missing_data_sorted.index)
-                ax.set_xlabel('Number of Missing Values')
-                ax.set_title('Missing Values by Column')
-                ax.grid(True, alpha=0.3)
-                
-                # Add value labels on bars
-                for i, v in enumerate(missing_data_sorted.values):
-                    ax.text(v + max(missing_data_sorted) * 0.01, i, str(v), va='center')
-                
-                st.pyplot(fig)
-                plt.close(fig)
-    
-    # Data Types Analysis
-    st.markdown("### Data Types Analysis")
-    
-    dtype_counts = df.dtypes.value_counts()
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**Data Type Distribution:**")
-        
-        # Create a nice display of data types
-        for dtype, count in dtype_counts.items():
-            dtype_name = str(dtype)
-            if 'int' in dtype_name.lower():
-                icon = "🔢"
-                color = "#10B981"
-            elif 'float' in dtype_name.lower():
-                icon = "📊"
-                color = "#F59E0B"
-            elif 'datetime' in dtype_name.lower():
-                icon = "📅"
-                color = "#3B82F6"
-            elif 'object' in dtype_name.lower() or 'category' in dtype_name.lower():
-                icon = "📝"
-                color = "#EF4444"
-            else:
-                icon = "📋"
-                color = "#6B7280"
-            
-            st.markdown(f"""
-            <div style="
-                display: flex;
-                align-items: center;
-                padding: 8px;
-                margin: 4px 0;
-                background-color: #f8f9fa;
-                border-left: 4px solid {color};
-                border-radius: 4px;
-            ">
-                <span style="font-size: 20px; margin-right: 10px;">{icon}</span>
-                <div>
-                    <div style="font-weight: 600;">{dtype_name}</div>
-                    <div style="color: #666; font-size: 14px;">{count} columns</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("**Data Type Recommendations:**")
-        
-        # Check for potential issues
-        recommendations = []
-        
-        # Check for object columns that might be numeric
-        object_cols = df.select_dtypes(include=['object']).columns
-        potential_numeric = []
-        for col in object_cols:
-            if df[col].nunique() < len(df) * 0.5:  # If relatively few unique values
-                potential_numeric.append(col)
-        
-        if potential_numeric:
-            recommendations.append(f"🔄 Consider converting {', '.join(potential_numeric[:3])} to numeric if they contain numbers")
-        
-        # Check for high cardinality categorical columns
-        high_cardinality = []
-        for col in object_cols:
-            if df[col].nunique() > 100:
-                high_cardinality.append(col)
-        
-        if high_cardinality:
-            recommendations.append(f"⚠️ High cardinality in {', '.join(high_cardinality[:3])} - consider encoding strategies")
-        
-        # Check for datetime columns stored as objects
-        datetime_candidates = []
-        for col in object_cols:
-            if any(term in col.lower() for term in ['date', 'time', 'created', 'updated']):
-                datetime_candidates.append(col)
-        
-        if datetime_candidates:
-            recommendations.append(f"📅 {', '.join(datetime_candidates[:3])} might be datetime columns")
-        
-        if recommendations:
-            for rec in recommendations:
-                st.info(rec)
-        else:
-            st.success("✅ Data types look appropriate!")
-    
-    # Duplicate Records Analysis
-    st.markdown("### Duplicate Records Analysis")
-    
-    duplicate_rows = df.duplicated().sum()
-    duplicate_percentage = (duplicate_rows / len(df)) * 100
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if duplicate_rows > 0:
-            st.error(f"🚨 Found {duplicate_rows:,} duplicate records ({duplicate_percentage:.2f}% of data)")
-            
-            # Show some examples of duplicates
-            duplicates_df = df[df.duplicated(keep=False)]
-            if not duplicates_df.empty:
-                st.markdown("**Sample Duplicate Records:**")
-                st.dataframe(duplicates_df.head(5), use_container_width=True)
-        else:
-            st.success("✅ No duplicate records found!")
-    
-    with col2:
-        # Duplicate analysis visualization
-        if duplicate_rows > 0:
-            st.markdown("**Duplicate Pattern Analysis:**")
-            
-            # Check for duplicates in specific columns
-            key_cols = []
-            for col in df.columns:
-                if any(term in col.lower() for term in ['id', 'key', 'code']):
-                    key_cols.append(col)
-            
-            if key_cols:
-                # Check duplicates by key columns
-                for key_col in key_cols[:3]:  # Check first 3 key columns
-                    dup_by_key = df.duplicated(subset=[key_col]).sum()
-                    if dup_by_key > 0:
-                        st.write(f"• {key_col}: {dup_by_key} duplicates")
-            else:
-                st.info("No ID/key columns found for detailed duplicate analysis")
-    
-    # Outlier Detection (Basic)
-    st.markdown("### Outlier Detection")
-    
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
-    if len(numeric_cols) > 0:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**Numeric Columns Outlier Summary:**")
-            
-            outlier_summary = {}
-            for col in numeric_cols[:5]:  # Analyze first 5 numeric columns
-                Q1 = df[col].quantile(0.25)
-                Q3 = df[col].quantile(0.75)
-                IQR = Q3 - Q1
-                lower_bound = Q1 - 1.5 * IQR
-                upper_bound = Q3 + 1.5 * IQR
-                
-                outliers = ((df[col] < lower_bound) | (df[col] > upper_bound)).sum()
-                outlier_percentage = (outliers / len(df)) * 100
-                
-                outlier_summary[col] = {
-                    'count': outliers,
-                    'percentage': outlier_percentage,
-                    'bounds': (lower_bound, upper_bound)
-                }
-                
-                # Display outlier info
-                if outliers > 0:
-                    st.markdown(f"""
-                    <div style="
-                        padding: 8px;
-                        margin: 4px 0;
-                        background-color: #fef2f2;
-                        border-left: 4px solid #EF4444;
-                        border-radius: 4px;
-                    ">
-                        <div style="font-weight: 600;">{col}</div>
-                        <div style="color: #666;">
-                            {outliers} outliers ({outlier_percentage:.1f}%)
-                            <br>Range: [{lower_bound:.2f}, {upper_bound:.2f}]
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        
-        with col2:
-            if outlier_summary:
-                st.markdown("**Outlier Detection Insights:**")
-                
-                total_outliers = sum(info['count'] for info in outlier_summary.values())
-                if total_outliers > 0:
-                    st.warning(f"⚠️ Found {total_outliers} potential outliers across {len(outlier_summary)} columns")
-                    
-                    # Recommendations
-                    if total_outliers > len(df) * 0.05:  # More than 5% outliers
-                        st.error("🚨 High outlier count detected - consider data cleaning or robust methods")
-                    elif total_outliers > 0:
-                        st.info("📊 Moderate outlier count - review during preprocessing")
-                else:
-                    st.success("✅ Low outlier count - data looks clean")
-    else:
-        st.info("No numeric columns available for outlier detection")
-    
-    # Data Quality Score
-    st.markdown("### Overall Data Quality Score")
-    
-    # Calculate a simple quality score
-    quality_score = 100
-    
-    # Deduct for missing values
-    missing_penalty = min(30, (missing_data.sum() / len(df)) * 100)
-    quality_score -= missing_penalty
-    
-    # Deduct for duplicates
-    duplicate_penalty = min(20, duplicate_percentage)
-    quality_score -= duplicate_penalty
-    
-    # Deduct for outliers (if any numeric columns)
-    if len(numeric_cols) > 0:
-        outlier_penalty = min(15, total_outliers / len(df) * 100 if 'total_outliers' in locals() else 0)
-        quality_score -= outlier_penalty
-    
-    quality_score = max(0, quality_score)
-    
-    # Display quality score with color
-    if quality_score >= 80:
-        score_color = "#10B981"
-        score_emoji = "🟢"
-        score_text = "Excellent"
-    elif quality_score >= 60:
-        score_color = "#F59E0B"
-        score_emoji = "🟡"
-        score_text = "Good"
-    elif quality_score >= 40:
-        score_color = "#EF4444"
-        score_emoji = "🟠"
-        score_text = "Fair"
-    else:
-        score_color = "#991B1B"
-        score_emoji = "🔴"
-        score_text = "Poor"
-    
-    st.markdown(f"""
-    <div style="
-        text-align: center;
-        padding: 20px;
-        background-color: #f8f9fa;
-        border-radius: 10px;
-        border: 2px solid {score_color};
-    ">
-        <div style="font-size: 48px; margin-bottom: 10px;">{score_emoji}</div>
-        <div style="font-size: 24px; font-weight: 600; color: {score_color};">
-            Data Quality Score: {quality_score:.1f}/100
-        </div>
-        <div style="font-size: 18px; margin-top: 5px; color: {score_color};">
-            {score_text}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        # ── KPI cards ──
+        total_rows   = len(df)
+        total_cols   = df.shape[1]
+        numeric_cnt  = len(numeric_cols_dqa)
+        missing_total = df.isnull().sum().sum()
+        dup_cnt      = df.duplicated().sum()
+
+        kpi_html = "".join([
+            f"<div class='summary-card'><div class='summary-title'>{k}</div><div class='summary-value'>{v}</div></div>"
+            for k, v in {
+                "Total Rows": f"{total_rows:,}",
+                "Total Columns": f"{total_cols}",
+                "Numeric Columns": f"{numeric_cnt}",
+                "Total Missing Values": f"{missing_total:,}",
+                "Duplicate Rows": f"{dup_cnt:,}",
+            }.items()
+        ])
+        st.markdown(f"<div class='summary-grid'>{kpi_html}</div>", unsafe_allow_html=True)
+
+        # ── Correlation heatmap ──
+        blue_title("Correlation Heatmap (Numeric Columns)")
+        sample_df_dqa = df[numeric_cols_dqa].dropna()
+        if len(sample_df_dqa) > 5000:
+            sample_df_dqa = sample_df_dqa.sample(5000, random_state=42)
+        corr_matrix = sample_df_dqa.corr().round(2)
+
+        fig_h, ax_h = plt.subplots(figsize=(min(16, len(numeric_cols_dqa) + 2),
+                                             min(14, len(numeric_cols_dqa) + 1)))
+        fig_h.patch.set_facecolor("#FFFFFF")
+        sns.heatmap(
+            corr_matrix,
+            ax=ax_h,
+            annot=len(numeric_cols_dqa) <= 15,
+            fmt=".1f",
+            cmap="coolwarm",
+            center=0,
+            linewidths=0.4,
+            linecolor="#E0E0E0",
+            square=True,
+            cbar_kws={"shrink": 0.8}
+        )
+        ax_h.set_title("Correlation Matrix", fontsize=14, fontweight="bold", pad=12)
+        ax_h.tick_params(axis="x", rotation=45, labelsize=8)
+        ax_h.tick_params(axis="y", rotation=0, labelsize=8)
+        plt.tight_layout()
+        st.pyplot(fig_h)
+        plt.close(fig_h)
+
+        # ── Skewness & Kurtosis ──
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Skewness by Numeric Column")
+            skew_vals = df[numeric_cols_dqa].skew().sort_values(ascending=False)
+            fig_sk, ax_sk = plt.subplots(figsize=(7, max(4, len(skew_vals) * 0.3)))
+            fig_sk.patch.set_facecolor(GREEN_BG); ax_sk.set_facecolor(GREEN_BG)
+            colors_sk = [BAR_BLUE if v >= 0 else "#EF4444" for v in skew_vals]
+            ax_sk.barh(skew_vals.index.astype(str), skew_vals.values, color=colors_sk)
+            ax_sk.axvline(0, color="black", linewidth=0.8)
+            ax_sk.set_xlabel("Skewness")
+            ax_sk.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax_sk.spines["top"].set_visible(False); ax_sk.spines["right"].set_visible(False)
+            plt.tight_layout()
+            st.pyplot(fig_sk); plt.close(fig_sk)
+
+        with c2:
+            blue_title("Kurtosis by Numeric Column")
+            kurt_vals = df[numeric_cols_dqa].kurtosis().sort_values(ascending=False)
+            fig_ku, ax_ku = plt.subplots(figsize=(7, max(4, len(kurt_vals) * 0.3)))
+            fig_ku.patch.set_facecolor(GREEN_BG); ax_ku.set_facecolor(GREEN_BG)
+            colors_ku = [BAR_BLUE if v >= 0 else "#EF4444" for v in kurt_vals]
+            ax_ku.barh(kurt_vals.index.astype(str), kurt_vals.values, color=colors_ku)
+            ax_ku.axvline(0, color="black", linewidth=0.8)
+            ax_ku.set_xlabel("Kurtosis")
+            ax_ku.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax_ku.spines["top"].set_visible(False); ax_ku.spines["right"].set_visible(False)
+            plt.tight_layout()
+            st.pyplot(fig_ku); plt.close(fig_ku)
+
+        # ── IQR Outlier count ──
+        blue_title("IQR-Based Outlier Count per Numeric Column")
+        outlier_counts = {}
+        for col in numeric_cols_dqa:
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
+            IQR = Q3 - Q1
+            outlier_counts[col] = int(((df[col] < Q1 - 1.5 * IQR) | (df[col] > Q3 + 1.5 * IQR)).sum())
+        outlier_series = pd.Series(outlier_counts).sort_values(ascending=False)
+
+        fig_o, ax_o = plt.subplots(figsize=(10, max(4, len(outlier_series) * 0.3)))
+        fig_o.patch.set_facecolor(GREEN_BG); ax_o.set_facecolor(GREEN_BG)
+        ax_o.barh(outlier_series.index.astype(str), outlier_series.values, color=BAR_BLUE)
+        ax_o.set_xlabel("Outlier Count (IQR method)")
+        ax_o.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax_o.spines["top"].set_visible(False); ax_o.spines["right"].set_visible(False)
+        plt.tight_layout()
+        st.pyplot(fig_o); plt.close(fig_o)
+
+        # ── Full numeric stats table ──
+        st.markdown("#### Numeric Column Statistics (Full Profile)")
+        desc = df[numeric_cols_dqa].describe().T.round(3)
+        desc["skewness"] = df[numeric_cols_dqa].skew().round(3)
+        desc["kurtosis"] = df[numeric_cols_dqa].kurtosis().round(3)
+        desc["outliers_iqr"] = outlier_series
+        render_html_table(desc.reset_index().rename(columns={"index": "Column"}), max_height=450)
 
 
 # ================================================================
@@ -4006,6 +3871,8 @@ elif eda_option == "Product Analysis":
     
     # Product Performance Metrics (if numeric columns available)
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    performance_cols = []
+    category_cols = []
     
     if numeric_cols:
         st.markdown("### Product Performance Metrics")
@@ -4025,22 +3892,17 @@ elif eda_option == "Product Analysis":
                 st.markdown("**Performance by Product:**")
                 
                 # Group by product and calculate metrics
-                product_performance = df.groupby(product_col)[performance_cols].agg([
-                    'count', 'mean', 'sum', 'std'
-                ]).round(2)
-                
-                # Create columns for display
-                display_cols = ['Records', f'Avg {performance_cols[0]}', f'Total {performance_cols[0]}']
-                product_performance.columns = display_cols
+                _pcol = performance_cols[0]
+                product_performance = df.groupby(product_col)[_pcol].agg(
+                    Records='count',
+                    **{f'Avg {_pcol}': 'mean', f'Total {_pcol}': 'sum', f'Std Dev {_pcol}': 'std'}
+                ).round(2)
                 
                 # Show top 10 performing products
                 top_performers = product_performance.sort_values(
-                    by=f'Total {performance_cols[0]}', ascending=False
+                    by=f'Total {_pcol}', ascending=False
                 ).head(10)
-                
-                # Create columns for display
-                display_cols = ['Records', f'Avg {performance_cols[0]}', f'Total {performance_cols[0]}', f'Std Dev {performance_cols[0]}']
-                product_performance.columns = display_cols
+                display_cols = list(product_performance.columns)
                 
                 st.dataframe(top_performers, use_container_width=True)
             
@@ -4050,7 +3912,7 @@ elif eda_option == "Product Analysis":
                 
                 # Create performance distribution chart
                 if len(top_performers) > 0:
-                    perf_col = col_total
+                    perf_col = f"Total {_pcol}"
                     
                     fig, ax = plt.subplots(figsize=(8, 5))
                     fig.patch.set_facecolor('#00D05E')
@@ -4059,8 +3921,8 @@ elif eda_option == "Product Analysis":
                     ax.bar(range(len(top_performers)), top_performers[perf_col], 
                            color='#F59E0B', alpha=0.8)
                     ax.set_xlabel('Products')
-                    ax.set_ylabel(f'Total {performance_cols[0]}')
-                    ax.set_title(f'Top 10 Products by {performance_cols[0]}')
+                    ax.set_ylabel(f'Total {_pcol}')
+                    ax.set_title(f'Top 10 Products by {_pcol}')
                     ax.set_xticks(range(len(top_performers)))
                     ax.set_xticklabels([str(p)[:20] for p in top_performers.index], rotation=45, ha='right')
                     ax.grid(True, alpha=0.3)
@@ -4210,7 +4072,49 @@ elif eda_option == "Customer Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Customer Analysis will be implemented with customer behavior analytics")
+    st.markdown("### Customer (Store) Behavior Analysis")
+    if col_store and col_stockval:
+        top_stores = df.groupby(col_store, observed=True)[col_stockval].sum().sort_values(ascending=False).head(15)
+        blue_title("Top 15 Stores by Total Stock Value")
+        fig, ax = plt.subplots(figsize=(10, 5))
+        fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+        ax.barh(top_stores.index.astype(str)[::-1], top_stores.values[::-1], color=BAR_BLUE)
+        ax.set_xlabel("Total Stock Value (₹)"); ax.set_ylabel("Store ID")
+        ax.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+        st.pyplot(fig); plt.close(fig)
+    if col_store and col_fill_rate and col_stockout:
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Fill Rate Distribution across Stores")
+            fig2, ax2 = plt.subplots(figsize=(7, 4))
+            fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+            fr_store = df.groupby(col_store, observed=True)[col_fill_rate].mean()
+            ax2.hist(fr_store.values, bins=20, color=BAR_BLUE, edgecolor="white")
+            ax2.set_xlabel("Avg Fill Rate (%)"); ax2.set_ylabel("Number of Stores")
+            ax2.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
+            st.pyplot(fig2); plt.close(fig2)
+        with c2:
+            blue_title("Stockout Rate Distribution across Stores")
+            fig3, ax3 = plt.subplots(figsize=(7, 4))
+            fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+            so_store = df.groupby(col_store, observed=True)[col_stockout].mean()
+            ax3.hist(so_store.values, bins=20, color="#EF4444", edgecolor="white")
+            ax3.set_xlabel("Avg Stockout Rate (%)"); ax3.set_ylabel("Number of Stores")
+            ax3.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+            st.pyplot(fig3); plt.close(fig3)
+    if col_store_type and col_stockval:
+        blue_title("Stock Value by Store Type")
+        sv_type = df.groupby(col_store_type, observed=True)[col_stockval].sum().sort_values(ascending=False)
+        fig4, ax4 = plt.subplots(figsize=(8, 4))
+        fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+        ax4.bar(sv_type.index.astype(str), sv_type.values, color=BAR_BLUE)
+        ax4.set_xlabel("Store Type"); ax4.set_ylabel("Stock Value (₹)")
+        ax4.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+        st.pyplot(fig4); plt.close(fig4)
 
 
 # ================================================================
@@ -4243,7 +4147,55 @@ elif eda_option == "Store Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Store Analysis will be implemented with store performance metrics")
+    st.markdown("### Store Performance Analysis")
+    if col_store and col_fill_rate and col_stockout and col_turnover and col_stockval:
+        store_metrics = df.groupby(col_store, observed=True).agg(
+            avg_fill_rate=(col_fill_rate, "mean"),
+            avg_stockout=(col_stockout, "mean"),
+            avg_turnover=(col_turnover, "mean"),
+            total_stock_value=(col_stockval, "sum")
+        ).round(2)
+        st.markdown("#### Store Performance Summary (Top 20 by Fill Rate)")
+        render_html_table(store_metrics.sort_values("avg_fill_rate", ascending=False).head(20), max_height=350)
+    if col_store_type and col_fill_rate:
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Avg Fill Rate by Store Type")
+            st_type = df.groupby(col_store_type, observed=True)[col_fill_rate].mean().sort_values(ascending=False)
+            fig, ax = plt.subplots(figsize=(7, 4))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.bar(st_type.index.astype(str), st_type.values, color=BAR_BLUE)
+            ax.set_xlabel("Store Type"); ax.set_ylabel("Avg Fill Rate (%)")
+            ax.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+        with c2:
+            if col_turnover:
+                blue_title("Avg Inventory Turnover by Store Type")
+                tv_type = df.groupby(col_store_type, observed=True)[col_turnover].mean().sort_values(ascending=False)
+                fig2, ax2 = plt.subplots(figsize=(7, 4))
+                fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+                ax2.bar(tv_type.index.astype(str), tv_type.values, color=BAR_BLUE)
+                ax2.set_xlabel("Store Type"); ax2.set_ylabel("Avg Turnover")
+                ax2.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+                ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
+                st.pyplot(fig2); plt.close(fig2)
+    if col_region and col_overstock and col_understock:
+        blue_title("Overstock vs Understock by Region")
+        reg = df.groupby(col_region, observed=True).agg(
+            total_overstock=(col_overstock, "sum"),
+            total_understock=(col_understock, "sum")
+        ).sort_values("total_overstock", ascending=False)
+        x = np.arange(len(reg)); w = 0.35
+        fig3, ax3 = plt.subplots(figsize=(10, 4))
+        fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+        ax3.bar(x - w/2, reg["total_overstock"], w, label="Overstock", color=BAR_BLUE)
+        ax3.bar(x + w/2, reg["total_understock"], w, label="Understock", color="#EF4444")
+        ax3.set_xticks(x); ax3.set_xticklabels(reg.index.astype(str), rotation=45, ha="right")
+        ax3.set_xlabel("Region"); ax3.set_ylabel("Quantity"); ax3.legend()
+        ax3.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+        st.pyplot(fig3); plt.close(fig3)
 
 
 # ================================================================
@@ -4276,7 +4228,55 @@ elif eda_option == "Vendor Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Vendor Analysis will be implemented with supplier performance analytics")
+    st.markdown("### Vendor / Supplier Performance Analysis")
+    if col_supplier and col_lead_time and col_rating:
+        sup_metrics = df.groupby(col_supplier, observed=True).agg(
+            avg_lead_time=(col_lead_time, "mean"),
+            avg_rating=(col_rating, "mean")
+        ).round(2).sort_values("avg_rating", ascending=False)
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Top 15 Suppliers by Rating Score")
+            top_sup = sup_metrics.head(15)
+            fig, ax = plt.subplots(figsize=(7, 5))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.barh(top_sup.index.astype(str)[::-1], top_sup["avg_rating"].values[::-1], color=BAR_BLUE)
+            ax.set_xlabel("Avg Rating Score"); ax.set_ylabel("Supplier ID")
+            ax.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+        with c2:
+            blue_title("Avg Lead Time by Supplier (Top 15 Fastest)")
+            top_lt = sup_metrics.sort_values("avg_lead_time").head(15)
+            fig2, ax2 = plt.subplots(figsize=(7, 5))
+            fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+            ax2.barh(top_lt.index.astype(str)[::-1], top_lt["avg_lead_time"].values[::-1], color="#10B981")
+            ax2.set_xlabel("Avg Lead Time (days)"); ax2.set_ylabel("Supplier ID")
+            ax2.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
+            st.pyplot(fig2); plt.close(fig2)
+    if col_rating:
+        blue_title("Supplier Rating Score Distribution")
+        fig3, ax3 = plt.subplots(figsize=(10, 4))
+        fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+        ax3.hist(df[col_rating].dropna(), bins=30, color=BAR_BLUE, edgecolor="white")
+        ax3.set_xlabel("Rating Score"); ax3.set_ylabel("Frequency")
+        ax3.axvline(df[col_rating].mean(), color="#EF4444", linestyle="--", linewidth=2, label=f"Mean: {df[col_rating].mean():.2f}")
+        ax3.legend()
+        ax3.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+        st.pyplot(fig3); plt.close(fig3)
+    if col_cost_price and col_category:
+        blue_title("Avg Cost Price by Category")
+        cp_cat = df.groupby(col_category, observed=True)[col_cost_price].mean().sort_values(ascending=False)
+        fig4, ax4 = plt.subplots(figsize=(10, 4))
+        fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+        ax4.bar(cp_cat.index.astype(str), cp_cat.values, color=BAR_BLUE)
+        ax4.set_xlabel("Category"); ax4.set_ylabel("Avg Cost Price (₹)")
+        ax4.tick_params(axis="x", rotation=45)
+        ax4.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+        st.pyplot(fig4); plt.close(fig4)
 
 
 # ================================================================
@@ -4309,7 +4309,67 @@ elif eda_option == "Location Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Location Analysis will be implemented with geographic analytics")
+    st.markdown("### Location & Regional Analysis")
+    if col_region and col_stockval:
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Total Stock Value by Region")
+            sv_reg = df.groupby(col_region, observed=True)[col_stockval].sum().sort_values(ascending=False)
+            fig, ax = plt.subplots(figsize=(7, 4))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.bar(sv_reg.index.astype(str), sv_reg.values, color=BAR_BLUE)
+            ax.set_xlabel("Region"); ax.set_ylabel("Total Stock Value (₹)")
+            ax.tick_params(axis="x", rotation=45)
+            ax.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+        with c2:
+            blue_title("Stock Value Share by Region")
+            fig2, ax2 = plt.subplots(figsize=(7, 4))
+            fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+            ax2.pie(sv_reg.values, labels=sv_reg.index.astype(str), autopct="%1.1f%%", startangle=90)
+            st.pyplot(fig2); plt.close(fig2)
+    if col_zone and col_fill_rate:
+        c3, c4 = st.columns(2)
+        with c3:
+            blue_title("Avg Fill Rate by Zone")
+            fr_zone = df.groupby(col_zone, observed=True)[col_fill_rate].mean().sort_values(ascending=False)
+            fig3, ax3 = plt.subplots(figsize=(7, 4))
+            fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+            ax3.bar(fr_zone.index.astype(str), fr_zone.values, color=BAR_BLUE)
+            ax3.set_xlabel("Zone"); ax3.set_ylabel("Avg Fill Rate (%)")
+            ax3.tick_params(axis="x", rotation=45)
+            ax3.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+            st.pyplot(fig3); plt.close(fig3)
+        with c4:
+            if col_stockout:
+                blue_title("Avg Stockout Rate by Zone")
+                so_zone = df.groupby(col_zone, observed=True)[col_stockout].mean().sort_values(ascending=False)
+                fig4, ax4 = plt.subplots(figsize=(7, 4))
+                fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+                ax4.bar(so_zone.index.astype(str), so_zone.values, color="#EF4444")
+                ax4.set_xlabel("Zone"); ax4.set_ylabel("Avg Stockout Rate (%)")
+                ax4.tick_params(axis="x", rotation=45)
+                ax4.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+                ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+                st.pyplot(fig4); plt.close(fig4)
+    if col_region and col_overstock and col_understock:
+        blue_title("Overstock vs Understock by Region")
+        reg_ou = df.groupby(col_region, observed=True).agg(
+            total_overstock=(col_overstock, "sum"),
+            total_understock=(col_understock, "sum")
+        ).sort_values("total_overstock", ascending=False)
+        x = np.arange(len(reg_ou)); w = 0.35
+        fig5, ax5 = plt.subplots(figsize=(10, 4))
+        fig5.patch.set_facecolor(GREEN_BG); ax5.set_facecolor(GREEN_BG)
+        ax5.bar(x - w/2, reg_ou["total_overstock"], w, label="Overstock", color=BAR_BLUE)
+        ax5.bar(x + w/2, reg_ou["total_understock"], w, label="Understock", color="#EF4444")
+        ax5.set_xticks(x); ax5.set_xticklabels(reg_ou.index.astype(str), rotation=45, ha="right")
+        ax5.set_xlabel("Region"); ax5.set_ylabel("Quantity"); ax5.legend()
+        ax5.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax5.spines["top"].set_visible(False); ax5.spines["right"].set_visible(False)
+        st.pyplot(fig5); plt.close(fig5)
 
 
 # ================================================================
@@ -4342,7 +4402,70 @@ elif eda_option == "Warehouse Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Warehouse Analysis will be implemented with warehouse performance metrics")
+    st.markdown("### Warehouse Operations & Efficiency Analysis")
+    if col_onhand and col_turnover:
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Inventory Turnover Distribution")
+            fig, ax = plt.subplots(figsize=(7, 4))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.hist(df[col_turnover].dropna(), bins=30, color=BAR_BLUE, edgecolor="white")
+            ax.set_xlabel("Inventory Turnover"); ax.set_ylabel("Frequency")
+            ax.axvline(df[col_turnover].mean(), color="#EF4444", linestyle="--", linewidth=2, label=f"Mean: {df[col_turnover].mean():.2f}")
+            ax.legend(); ax.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+        with c2:
+            blue_title("On-Hand Quantity Distribution")
+            fig2, ax2 = plt.subplots(figsize=(7, 4))
+            fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+            ax2.hist(df[col_onhand].dropna(), bins=30, color=BAR_BLUE, edgecolor="white")
+            ax2.set_xlabel("On-Hand Qty"); ax2.set_ylabel("Frequency")
+            ax2.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
+            st.pyplot(fig2); plt.close(fig2)
+    if col_category and col_turnover:
+        blue_title("Avg Inventory Turnover by Category")
+        tv_cat = df.groupby(col_category, observed=True)[col_turnover].mean().sort_values(ascending=False)
+        fig3, ax3 = plt.subplots(figsize=(10, 4))
+        fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+        ax3.bar(tv_cat.index.astype(str), tv_cat.values, color=BAR_BLUE)
+        ax3.set_xlabel("Category"); ax3.set_ylabel("Avg Turnover")
+        ax3.tick_params(axis="x", rotation=45)
+        ax3.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+        st.pyplot(fig3); plt.close(fig3)
+    if col_excess and col_category:
+        blue_title("Avg Excess Inventory (%) by Category")
+        ex_cat = df.groupby(col_category, observed=True)[col_excess].mean().sort_values(ascending=False)
+        fig4, ax4 = plt.subplots(figsize=(10, 4))
+        fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+        ax4.bar(ex_cat.index.astype(str), ex_cat.values, color="#EF4444")
+        ax4.set_xlabel("Category"); ax4.set_ylabel("Avg Excess Inventory (%)")
+        ax4.tick_params(axis="x", rotation=45)
+        ax4.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+        st.pyplot(fig4); plt.close(fig4)
+    if col_overstock and col_understock:
+        c3, c4 = st.columns(2)
+        with c3:
+            blue_title("Overstock Quantity Distribution")
+            fig5, ax5 = plt.subplots(figsize=(7, 4))
+            fig5.patch.set_facecolor(GREEN_BG); ax5.set_facecolor(GREEN_BG)
+            ax5.hist(df[col_overstock].dropna(), bins=30, color=BAR_BLUE, edgecolor="white")
+            ax5.set_xlabel("Overstock Qty"); ax5.set_ylabel("Frequency")
+            ax5.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax5.spines["top"].set_visible(False); ax5.spines["right"].set_visible(False)
+            st.pyplot(fig5); plt.close(fig5)
+        with c4:
+            blue_title("Understock Quantity Distribution")
+            fig6, ax6 = plt.subplots(figsize=(7, 4))
+            fig6.patch.set_facecolor(GREEN_BG); ax6.set_facecolor(GREEN_BG)
+            ax6.hist(df[col_understock].dropna(), bins=30, color="#EF4444", edgecolor="white")
+            ax6.set_xlabel("Understock Qty"); ax6.set_ylabel("Frequency")
+            ax6.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax6.spines["top"].set_visible(False); ax6.spines["right"].set_visible(False)
+            st.pyplot(fig6); plt.close(fig6)
 
 
 # ================================================================
@@ -4375,7 +4498,64 @@ elif eda_option == "Transport Route Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Transport Route Analysis will be implemented with logistics analytics")
+    st.markdown("### Transport Route Performance Analysis")
+    if col_route and col_delivery and col_fuel and col_efficiency:
+        route_metrics = df.groupby(col_route, observed=True).agg(
+            avg_delivery=(col_delivery, "mean"),
+            avg_fuel=(col_fuel, "mean"),
+            avg_efficiency=(col_efficiency, "mean")
+        ).round(2)
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Top 15 Routes by Route Efficiency Score")
+            top_eff = route_metrics.sort_values("avg_efficiency", ascending=False).head(15)
+            fig, ax = plt.subplots(figsize=(7, 5))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.barh(top_eff.index.astype(str)[::-1], top_eff["avg_efficiency"].values[::-1], color=BAR_BLUE)
+            ax.set_xlabel("Avg Efficiency Score"); ax.set_ylabel("Route ID")
+            ax.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+        with c2:
+            blue_title("Top 15 Routes by Avg Fuel Cost")
+            top_fuel = route_metrics.sort_values("avg_fuel", ascending=False).head(15)
+            fig2, ax2 = plt.subplots(figsize=(7, 5))
+            fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+            ax2.barh(top_fuel.index.astype(str)[::-1], top_fuel["avg_fuel"].values[::-1], color="#EF4444")
+            ax2.set_xlabel("Avg Fuel Cost (₹)"); ax2.set_ylabel("Route ID")
+            ax2.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
+            st.pyplot(fig2); plt.close(fig2)
+        blue_title("Delivery Time Distribution")
+        fig3, ax3 = plt.subplots(figsize=(10, 4))
+        fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+        ax3.hist(df[col_delivery].dropna(), bins=40, color=BAR_BLUE, edgecolor="white")
+        ax3.set_xlabel("Delivery Time (mins)"); ax3.set_ylabel("Frequency")
+        ax3.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+        st.pyplot(fig3); plt.close(fig3)
+        if col_distance:
+            c3, c4 = st.columns(2)
+            with c3:
+                blue_title("Fuel Cost vs Distance (km)")
+                fig4, ax4 = plt.subplots(figsize=(7, 4))
+                fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+                sample = df[[col_distance, col_fuel]].dropna().sample(min(3000, len(df)), random_state=42)
+                ax4.scatter(sample[col_distance], sample[col_fuel], color=BAR_BLUE, alpha=0.4, s=10)
+                ax4.set_xlabel("Distance (km)"); ax4.set_ylabel("Fuel Cost (₹)")
+                ax4.grid(linestyle="-", color=GRID_GREEN, alpha=0.3)
+                ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+                st.pyplot(fig4); plt.close(fig4)
+            with c4:
+                blue_title("Route Efficiency vs Fuel Cost")
+                fig5, ax5 = plt.subplots(figsize=(7, 4))
+                fig5.patch.set_facecolor(GREEN_BG); ax5.set_facecolor(GREEN_BG)
+                sample2 = df[[col_efficiency, col_fuel]].dropna().sample(min(3000, len(df)), random_state=42)
+                ax5.scatter(sample2[col_efficiency], sample2[col_fuel], color="#EF4444", alpha=0.4, s=10)
+                ax5.set_xlabel("Route Efficiency Score"); ax5.set_ylabel("Fuel Cost (₹)")
+                ax5.grid(linestyle="-", color=GRID_GREEN, alpha=0.3)
+                ax5.spines["top"].set_visible(False); ax5.spines["right"].set_visible(False)
+                st.pyplot(fig5); plt.close(fig5)
 
 
 # ================================================================
@@ -4408,7 +4588,63 @@ elif eda_option == "Sales Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Sales Analysis will be implemented with advanced sales analytics")
+    st.markdown("### Sales & Revenue Deep-Dive Analysis")
+    if col_stockval and col_category:
+        blue_title("Stock Value by Category (Detailed)")
+        sv_cat = df.groupby(col_category, observed=True)[col_stockval].agg(["sum", "mean", "count"]).round(2)
+        sv_cat.columns = ["Total Stock Value (₹)", "Avg Stock Value (₹)", "Record Count"]
+        render_html_table(sv_cat.reset_index().sort_values("Total Stock Value (₹)", ascending=False), max_height=300)
+    if col_stockval and col_quarter:
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Stock Value by Quarter")
+            sv_q = df.groupby(col_quarter)[col_stockval].sum().sort_index()
+            fig, ax = plt.subplots(figsize=(7, 4))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.bar(sv_q.index.astype(str), sv_q.values, color=BAR_BLUE)
+            ax.set_xlabel("Quarter"); ax.set_ylabel("Stock Value (₹)")
+            ax.tick_params(axis="x", rotation=45)
+            ax.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+        with c2:
+            if col_is_holiday:
+                blue_title("Stock Value: Holiday vs Non-Holiday")
+                hol_grp = df.groupby(col_is_holiday)[col_stockval].sum()
+                labels = ["Non-Holiday" if not k else "Holiday" for k in hol_grp.index]
+                fig2, ax2 = plt.subplots(figsize=(7, 4))
+                fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+                ax2.bar(labels, hol_grp.values, color=[BAR_BLUE, "#EF4444"])
+                ax2.set_ylabel("Total Stock Value (₹)")
+                ax2.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+                ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
+                st.pyplot(fig2); plt.close(fig2)
+    if col_fill_rate and col_is_weekend:
+        c3, c4 = st.columns(2)
+        with c3:
+            blue_title("Avg Fill Rate: Weekday vs Weekend")
+            wk_grp = df.groupby(col_is_weekend)[col_fill_rate].mean()
+            labels = ["Weekday" if not k else "Weekend" for k in wk_grp.index]
+            fig3, ax3 = plt.subplots(figsize=(7, 4))
+            fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+            ax3.bar(labels, wk_grp.values, color=[BAR_BLUE, "#F59E0B"])
+            ax3.set_ylabel("Avg Fill Rate (%)")
+            ax3.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+            st.pyplot(fig3); plt.close(fig3)
+        with c4:
+            if col_turnover and col_month:
+                blue_title("Avg Inventory Turnover by Month")
+                tv_month = df.groupby(col_month)[col_turnover].mean().sort_index()
+                fig4, ax4 = plt.subplots(figsize=(7, 4))
+                fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+                ax4.plot(range(len(tv_month)), tv_month.values, marker="o", color=BAR_BLUE, linewidth=2)
+                ax4.set_xticks(range(len(tv_month)))
+                ax4.set_xticklabels(tv_month.index.astype(str), rotation=45, ha="right")
+                ax4.set_ylabel("Avg Turnover")
+                ax4.grid(linestyle="-", color=GRID_GREEN, alpha=0.4)
+                ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+                st.pyplot(fig4); plt.close(fig4)
 
 
 # ================================================================
@@ -4441,7 +4677,66 @@ elif eda_option == "Inventory Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Inventory Analysis will be implemented with inventory optimization analytics")
+    st.markdown("### Inventory Management & Optimization Analysis")
+    if col_onhand and col_overstock and col_understock and col_fill_rate:
+        inv_summary = {
+            "Total On-Hand Qty": f"{df[col_onhand].sum():,.0f}",
+            "Total Overstock Qty": f"{df[col_overstock].sum():,.0f}",
+            "Total Understock Qty": f"{df[col_understock].sum():,.0f}",
+            "Avg Fill Rate (%)": f"{df[col_fill_rate].mean():.1f}%",
+            "Avg Stockout Rate (%)": f"{df[col_stockout].mean():.1f}%" if col_stockout else "N/A",
+            "Avg Inventory Turnover": f"{df[col_turnover].mean():.2f}" if col_turnover else "N/A",
+        }
+        inv_html = "".join([f"<div class='summary-card'><div class='summary-title'>{k}</div><div class='summary-value'>{v}</div></div>" for k, v in inv_summary.items()])
+        st.markdown(f"<div class='summary-grid'>{inv_html}</div>", unsafe_allow_html=True)
+    if col_fill_rate and col_stockout:
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Fill Rate Distribution")
+            fig, ax = plt.subplots(figsize=(7, 4))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.hist(df[col_fill_rate].dropna(), bins=30, color=BAR_BLUE, edgecolor="white")
+            ax.set_xlabel("Fill Rate (%)"); ax.set_ylabel("Frequency")
+            ax.axvline(df[col_fill_rate].mean(), color="#EF4444", linestyle="--", linewidth=2, label=f"Mean: {df[col_fill_rate].mean():.1f}%")
+            ax.legend(); ax.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+        with c2:
+            blue_title("Stockout Rate Distribution")
+            fig2, ax2 = plt.subplots(figsize=(7, 4))
+            fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+            ax2.hist(df[col_stockout].dropna(), bins=30, color="#EF4444", edgecolor="white")
+            ax2.set_xlabel("Stockout Rate (%)"); ax2.set_ylabel("Frequency")
+            ax2.axvline(df[col_stockout].mean(), color=BAR_BLUE, linestyle="--", linewidth=2, label=f"Mean: {df[col_stockout].mean():.1f}%")
+            ax2.legend(); ax2.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
+            st.pyplot(fig2); plt.close(fig2)
+    if col_category and col_fill_rate and col_stockout:
+        blue_title("Fill Rate vs Stockout Rate by Category")
+        cat_inv = df.groupby(col_category, observed=True).agg(
+            avg_fill=(col_fill_rate, "mean"),
+            avg_stockout=(col_stockout, "mean")
+        ).sort_values("avg_fill", ascending=False)
+        x = np.arange(len(cat_inv)); w = 0.35
+        fig3, ax3 = plt.subplots(figsize=(10, 4))
+        fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+        ax3.bar(x - w/2, cat_inv["avg_fill"], w, label="Avg Fill Rate (%)", color=BAR_BLUE)
+        ax3.bar(x + w/2, cat_inv["avg_stockout"], w, label="Avg Stockout Rate (%)", color="#EF4444")
+        ax3.set_xticks(x); ax3.set_xticklabels(cat_inv.index.astype(str), rotation=45, ha="right")
+        ax3.set_ylabel("Rate (%)"); ax3.legend()
+        ax3.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+        st.pyplot(fig3); plt.close(fig3)
+    if col_shelf_life and col_category:
+        blue_title("Avg Shelf Life by Category (Risk Indicator)")
+        sl_cat = df.groupby(col_category, observed=True)[col_shelf_life].mean().sort_values()
+        fig4, ax4 = plt.subplots(figsize=(10, 4))
+        fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+        ax4.barh(sl_cat.index.astype(str), sl_cat.values, color=BAR_BLUE)
+        ax4.set_xlabel("Avg Shelf Life (days)"); ax4.set_ylabel("Category")
+        ax4.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+        st.pyplot(fig4); plt.close(fig4)
 
 
 # ================================================================
@@ -4474,7 +4769,75 @@ elif eda_option == "Redistribution Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Redistribution Analysis will be implemented with supply balancing analytics")
+    st.markdown("### Inventory Redistribution Analysis")
+    if col_transfer_qty and col_opt_qty:
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Actual vs Optimal Transfer Qty Distribution")
+            fig, ax = plt.subplots(figsize=(7, 4))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.hist(df[col_transfer_qty].dropna(), bins=30, alpha=0.7, color=BAR_BLUE, label="Actual Transfer", edgecolor="white")
+            ax.hist(df[col_opt_qty].dropna(), bins=30, alpha=0.5, color="#F59E0B", label="Optimal Transfer", edgecolor="white")
+            ax.set_xlabel("Transfer Qty"); ax.set_ylabel("Frequency"); ax.legend()
+            ax.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+        with c2:
+            blue_title("Transfer Qty vs Optimal Qty (Scatter)")
+            fig2, ax2 = plt.subplots(figsize=(7, 4))
+            fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+            sample = df[[col_transfer_qty, col_opt_qty]].dropna().sample(min(3000, len(df)), random_state=42)
+            ax2.scatter(sample[col_opt_qty], sample[col_transfer_qty], color=BAR_BLUE, alpha=0.3, s=10)
+            lims = [min(sample.min()), max(sample.max())]
+            ax2.plot(lims, lims, "r--", linewidth=1.5, label="Perfect alignment")
+            ax2.set_xlabel("Optimal Transfer Qty"); ax2.set_ylabel("Actual Transfer Qty"); ax2.legend()
+            ax2.grid(linestyle="-", color=GRID_GREEN, alpha=0.3)
+            ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
+            st.pyplot(fig2); plt.close(fig2)
+    if col_cluster and col_transfer_qty and col_transfer_cost:
+        blue_title("Avg Transfer Qty & Transfer Cost by Cluster (Top 20)")
+        cl_metrics = df.groupby(col_cluster, observed=True).agg(
+            avg_transfer_qty=(col_transfer_qty, "mean"),
+            avg_transfer_cost=(col_transfer_cost, "mean")
+        ).round(2).sort_values("avg_transfer_qty", ascending=False).head(20)
+        render_html_table(cl_metrics.reset_index(), max_height=300)
+    if col_cost_min and col_service_gain:
+        c3, c4 = st.columns(2)
+        with c3:
+            blue_title("Cost Minimization (%) Distribution")
+            fig3, ax3 = plt.subplots(figsize=(7, 4))
+            fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+            ax3.hist(df[col_cost_min].dropna(), bins=30, color=BAR_BLUE, edgecolor="white")
+            ax3.set_xlabel("Cost Minimization (%)"); ax3.set_ylabel("Frequency")
+            ax3.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+            st.pyplot(fig3); plt.close(fig3)
+        with c4:
+            blue_title("Service Level Gain (%) Distribution")
+            fig4, ax4 = plt.subplots(figsize=(7, 4))
+            fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+            ax4.hist(df[col_service_gain].dropna(), bins=30, color="#10B981", edgecolor="white")
+            ax4.set_xlabel("Service Level Gain (%)"); ax4.set_ylabel("Frequency")
+            ax4.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+            st.pyplot(fig4); plt.close(fig4)
+    if col_overstock and col_understock and col_region:
+        blue_title("Redistribution Gap: Overstock − Understock by Region")
+        ro = df.groupby(col_region, observed=True).agg(
+            total_overstock=(col_overstock, "sum"),
+            total_understock=(col_understock, "sum")
+        )
+        ro["redistribution_gap"] = ro["total_overstock"] - ro["total_understock"]
+        fig5, ax5 = plt.subplots(figsize=(10, 4))
+        fig5.patch.set_facecolor(GREEN_BG); ax5.set_facecolor(GREEN_BG)
+        colors_r = [BAR_BLUE if v >= 0 else "#EF4444" for v in ro["redistribution_gap"]]
+        ax5.bar(ro.index.astype(str), ro["redistribution_gap"], color=colors_r)
+        ax5.axhline(0, color="black", linewidth=0.8)
+        ax5.set_xlabel("Region"); ax5.set_ylabel("Overstock − Understock Gap")
+        ax5.tick_params(axis="x", rotation=45)
+        ax5.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax5.spines["top"].set_visible(False); ax5.spines["right"].set_visible(False)
+        st.pyplot(fig5); plt.close(fig5)
 
 
 # ================================================================
@@ -4507,7 +4870,58 @@ elif eda_option == "Reallocation Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Reallocation Analysis will be implemented with resource optimization analytics")
+    st.markdown("### Resource Reallocation Analysis")
+    if col_confidence and col_cluster:
+        c1, c2 = st.columns(2)
+        with c1:
+            blue_title("Model Confidence Score Distribution")
+            fig, ax = plt.subplots(figsize=(7, 4))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.hist(df[col_confidence].dropna(), bins=30, color=BAR_BLUE, edgecolor="white")
+            ax.set_xlabel("Model Confidence Score"); ax.set_ylabel("Frequency")
+            ax.axvline(df[col_confidence].mean(), color="#EF4444", linestyle="--", linewidth=2, label=f"Mean: {df[col_confidence].mean():.2f}")
+            ax.legend(); ax.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+        with c2:
+            blue_title("Avg Model Confidence by Cluster (Top 20)")
+            conf_cl = df.groupby(col_cluster, observed=True)[col_confidence].mean().sort_values(ascending=False).head(20)
+            fig2, ax2 = plt.subplots(figsize=(7, 4))
+            fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+            ax2.barh(conf_cl.index.astype(str)[::-1], conf_cl.values[::-1], color=BAR_BLUE)
+            ax2.set_xlabel("Avg Confidence Score"); ax2.set_ylabel("Cluster ID")
+            ax2.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
+            st.pyplot(fig2); plt.close(fig2)
+    if col_cost_min and col_service_gain and col_cluster:
+        blue_title("Cost Minimization vs Service Level Gain by Cluster")
+        cl_perf = df.groupby(col_cluster, observed=True).agg(
+            avg_cost_min=(col_cost_min, "mean"),
+            avg_service_gain=(col_service_gain, "mean")
+        ).round(2)
+        fig3, ax3 = plt.subplots(figsize=(10, 4))
+        fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+        ax3.scatter(cl_perf["avg_cost_min"], cl_perf["avg_service_gain"], color=BAR_BLUE, alpha=0.7, s=60)
+        ax3.set_xlabel("Avg Cost Minimization (%)"); ax3.set_ylabel("Avg Service Level Gain (%)")
+        ax3.grid(linestyle="-", color=GRID_GREEN, alpha=0.3)
+        ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+        st.pyplot(fig3); plt.close(fig3)
+    if col_onhand and col_overstock and col_category:
+        blue_title("Reallocation Potential: On-Hand vs Overstock by Category")
+        cat_re = df.groupby(col_category, observed=True).agg(
+            avg_onhand=(col_onhand, "mean"),
+            avg_overstock=(col_overstock, "mean")
+        ).round(2)
+        x = np.arange(len(cat_re)); w = 0.35
+        fig4, ax4 = plt.subplots(figsize=(10, 4))
+        fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+        ax4.bar(x - w/2, cat_re["avg_onhand"], w, label="Avg On-Hand Qty", color=BAR_BLUE)
+        ax4.bar(x + w/2, cat_re["avg_overstock"], w, label="Avg Overstock Qty", color="#EF4444")
+        ax4.set_xticks(x); ax4.set_xticklabels(cat_re.index.astype(str), rotation=45, ha="right")
+        ax4.set_ylabel("Avg Quantity"); ax4.legend()
+        ax4.grid(axis="y", linestyle="-", color=GRID_GREEN, alpha=0.5)
+        ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+        st.pyplot(fig4); plt.close(fig4)
 
 
 # ================================================================
@@ -4540,7 +4954,71 @@ elif eda_option == "Logistics Analysis":
         unsafe_allow_html=True
     )
 
-    st.info("📊 Logistics Analysis will be implemented with comprehensive supply chain analytics")
+    st.markdown("### Logistics & Supply Chain Efficiency Analysis")
+    if col_delivery and col_fuel and col_efficiency:
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown(f"""<div class="summary-card"><div class="summary-title">Avg Delivery Time</div><div class="summary-value">{df[col_delivery].mean():.0f} mins</div></div>""", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"""<div class="summary-card"><div class="summary-title">Avg Fuel Cost</div><div class="summary-value">₹{df[col_fuel].mean():.2f}</div></div>""", unsafe_allow_html=True)
+        with c3:
+            st.markdown(f"""<div class="summary-card"><div class="summary-title">Avg Route Efficiency</div><div class="summary-value">{df[col_efficiency].mean():.2f}</div></div>""", unsafe_allow_html=True)
+        st.write("")
+        if col_month:
+            blue_title("Delivery Time Trend by Month")
+            dt_month = df.groupby(col_month)[col_delivery].mean().sort_index()
+            fig, ax = plt.subplots(figsize=(10, 4))
+            fig.patch.set_facecolor(GREEN_BG); ax.set_facecolor(GREEN_BG)
+            ax.plot(range(len(dt_month)), dt_month.values, marker="o", color=BAR_BLUE, linewidth=2)
+            ax.fill_between(range(len(dt_month)), dt_month.values, alpha=0.2, color=BAR_BLUE)
+            ax.set_xticks(range(len(dt_month)))
+            ax.set_xticklabels(dt_month.index.astype(str), rotation=45, ha="right")
+            ax.set_ylabel("Avg Delivery Time (mins)")
+            ax.grid(linestyle="-", color=GRID_GREEN, alpha=0.4)
+            ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
+            st.pyplot(fig); plt.close(fig)
+    if col_vehicle and col_delivery and col_fuel:
+        c4, c5 = st.columns(2)
+        with c4:
+            blue_title("Avg Delivery Time by Vehicle (Top 15 Slowest)")
+            veh_dt = df.groupby(col_vehicle, observed=True)[col_delivery].mean().sort_values(ascending=False).head(15)
+            fig2, ax2 = plt.subplots(figsize=(7, 5))
+            fig2.patch.set_facecolor(GREEN_BG); ax2.set_facecolor(GREEN_BG)
+            ax2.barh(veh_dt.index.astype(str)[::-1], veh_dt.values[::-1], color=BAR_BLUE)
+            ax2.set_xlabel("Avg Delivery Time (mins)"); ax2.set_ylabel("Vehicle ID")
+            ax2.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
+            st.pyplot(fig2); plt.close(fig2)
+        with c5:
+            blue_title("Avg Fuel Cost by Vehicle (Top 15 Highest)")
+            veh_fc = df.groupby(col_vehicle, observed=True)[col_fuel].mean().sort_values(ascending=False).head(15)
+            fig3, ax3 = plt.subplots(figsize=(7, 5))
+            fig3.patch.set_facecolor(GREEN_BG); ax3.set_facecolor(GREEN_BG)
+            ax3.barh(veh_fc.index.astype(str)[::-1], veh_fc.values[::-1], color="#EF4444")
+            ax3.set_xlabel("Avg Fuel Cost (₹)"); ax3.set_ylabel("Vehicle ID")
+            ax3.grid(axis="x", linestyle="-", color=GRID_GREEN, alpha=0.5)
+            ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
+            st.pyplot(fig3); plt.close(fig3)
+    if col_delivery and col_efficiency:
+        blue_title("Delivery Time vs Route Efficiency Score")
+        fig4, ax4 = plt.subplots(figsize=(10, 4))
+        fig4.patch.set_facecolor(GREEN_BG); ax4.set_facecolor(GREEN_BG)
+        sample = df[[col_delivery, col_efficiency]].dropna().sample(min(3000, len(df)), random_state=42)
+        ax4.scatter(sample[col_efficiency], sample[col_delivery], color=BAR_BLUE, alpha=0.3, s=10)
+        ax4.set_xlabel("Route Efficiency Score"); ax4.set_ylabel("Delivery Time (mins)")
+        ax4.grid(linestyle="-", color=GRID_GREEN, alpha=0.3)
+        ax4.spines["top"].set_visible(False); ax4.spines["right"].set_visible(False)
+        st.pyplot(fig4); plt.close(fig4)
+    if col_lead_time and col_rating:
+        blue_title("Lead Time vs Supplier Rating Score")
+        fig5, ax5 = plt.subplots(figsize=(10, 4))
+        fig5.patch.set_facecolor(GREEN_BG); ax5.set_facecolor(GREEN_BG)
+        sample2 = df[[col_lead_time, col_rating]].dropna().sample(min(3000, len(df)), random_state=42)
+        ax5.scatter(sample2[col_rating], sample2[col_lead_time], color=BAR_BLUE, alpha=0.3, s=10)
+        ax5.set_xlabel("Supplier Rating Score"); ax5.set_ylabel("Lead Time (days)")
+        ax5.grid(linestyle="-", color=GRID_GREEN, alpha=0.3)
+        ax5.spines["top"].set_visible(False); ax5.spines["right"].set_visible(False)
+        st.pyplot(fig5); plt.close(fig5)
 
 
 st.write("")
@@ -4657,11 +5135,9 @@ if eda_option in [
             return chart_cat
         
         try:
-            chart_cat = safe_altair_chart(create_altair_chart)
-            if chart_cat is not None:
-                st.altair_chart(chart_cat, width='stretch')
-            else:
-                raise Exception("Chart creation failed")
+            chart_cat = create_altair_chart()
+            safe_altair_chart(chart_cat)
+            chart_cat = True  # success flag
         except Exception as e:
             st.error(f"Error creating Altair chart: {str(e)}")
             # Fallback to matplotlib
@@ -5019,7 +5495,7 @@ if eda_option in [
             .configure_axis(labelColor="#000000", titleColor="#000000",
                             gridColor="rgba(0,0,0,0.2)", domainColor="rgba(0,0,0,0.3)")
         )
-        st.altair_chart(chart_zsv, width='stretch')
+        st.altair_chart(chart_zsv, use_container_width=True)
 
     with col2:
         blue_title_zone(f"Stockout Rate by City (Top {TOP_CITIES})")
@@ -5082,7 +5558,7 @@ if eda_option in [
             .configure_axis(labelColor="#000000", titleColor="#000000",
                             gridColor="rgba(0,0,0,0.2)", domainColor="rgba(0,0,0,0.3)")
         )
-        st.altair_chart(chart_stf, width='stretch')
+        st.altair_chart(chart_stf, use_container_width=True)
 
 
 # ============================================================
@@ -5189,7 +5665,7 @@ if eda_option in [
             .configure_axis(labelColor="#000000", titleColor="#000000",
                             gridColor="rgba(0,0,0,0.2)", domainColor="rgba(0,0,0,0.3)")
         )
-        st.altair_chart(chart_di, width='stretch')
+        st.altair_chart(chart_di, use_container_width=True)
 
     with col2:
         blue_title_di("Model Confidence Score by Model Version")
@@ -5208,7 +5684,7 @@ if eda_option in [
             .configure_axis(labelColor="#000000", titleColor="#000000",
                             gridColor="rgba(0,0,0,0.2)", domainColor="rgba(0,0,0,0.3)")
         )
-        st.altair_chart(chart_mvc, width='stretch')
+        st.altair_chart(chart_mvc, use_container_width=True)
 
     col3, col4 = st.columns(2)
 
@@ -5250,7 +5726,7 @@ if eda_option in [
             .configure_axis(labelColor="#000000", titleColor="#000000",
                             gridColor="rgba(0,0,0,0.2)", domainColor="rgba(0,0,0,0.3)")
         )
-        st.altair_chart(chart_roi, width='stretch')
+        st.altair_chart(chart_roi, use_container_width=True)
 # STEP 4 – FEATURE ENGINEERING
 # ================================================================
 if not st.session_state.eda_completed:
@@ -5404,6 +5880,7 @@ Choose Feature Selection Methods
     )
 
     selection_mode = st.session_state.selection_mode
+    method = st.session_state.get("method_selection", "Correlation with Target")
 
 
     # ================================================================
