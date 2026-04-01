@@ -982,16 +982,22 @@ def load_data():
         'is_weekend': 'bool'
     }
     
+   @st.cache_data
+def load_data():
     try:
-        # Get absolute path relative to script location
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        csv_path = os.path.join(script_dir, "smart_inventory_app", "data", "FACT_SUPPLY_CHAIN_DATA.csv")
-        # Read with optimized dtypes
-        df = pd.read_csv(csv_path, dtype=dtype_spec)
-        return df
+        return pd.read_csv("FACT_SUPPLY_CHAIN_DATA.csv")
     except Exception as e:
-        st.error(f"Error loading CSV: {e}")
-        return pd.DataFrame()
+        st.error(f"Failed to load data: {str(e)}")
+        return None
+
+
+def show_small_plot(fig):
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
+    buf.seek(0)
+    st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
+    st.image(buf, width=480)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def show_small_plot(fig):
