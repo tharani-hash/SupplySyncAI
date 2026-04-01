@@ -982,7 +982,7 @@ def load_data():
         'is_weekend': 'bool'
     }
     
-   @st.cache_data
+@st.cache_data
 def load_data():
     try:
         return pd.read_csv("FACT_SUPPLY_CHAIN_DATA.csv")
